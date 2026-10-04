@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: facilitador-financeiro
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: node --test tests/*.test.cjs
+    startCommand: node server/server.cjs
+    healthCheckPath: /api/auth/availability
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+      - key: HOST
+        value: 0.0.0.0
+      - key: APP_USERNAME
+        sync: false
+      - key: APP_PASSWORD_HASH
+        sync: false

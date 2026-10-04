@@ -46,3 +46,7 @@ node --test tests/*.test.cjs
 ```
 
 No GitHub Pages, publique a raiz (`/`) da branch `main`. O arquivo `.nojekyll` mantém a publicação estática.
+
+## Login privado
+
+A versão 1.4 substitui a chave digitada no navegador por usuário, senha e sessão HttpOnly validada no servidor. O GitHub Pages não executa autenticação no servidor. Para habilitar, siga o guia INTEGRACAO-BANCARIA.md e crie a configuração privada com server/create-login.cjs. Não há senha padrão, chaves reais ou dados financeiros no repositório.

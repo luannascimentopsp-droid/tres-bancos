@@ -80,7 +80,7 @@ function renderSettings(){
  <div class="card section"><h2>Notificações dos bancos</h2><p class="small muted">${native?(access?'Acesso permitido pelo Android.':'Acesso ainda não permitido pelo Android.'):'A leitura funciona somente no Android.'}</p>${native?`<label class="check"><input id="capture" type="checkbox" ${state.capture?'checked':''}>Guardar sugestões dos três bancos</label>${btn('enable-notifications','Abrir permissão do Android','full')}`:'<p class="small muted">Use Registrar gasto, Recebi dinheiro e Transferir no Resumo.</p>'}</div>
  <div class="card"><h2>Conferir saldos</h2><p class="small muted">Se um lançamento ficou de fora, registre-o. Se precisar acertar o saldo atual, use um ajuste; ele não conta como renda.</p>${btn('reconcile','Ajustar saldo registrado','full')}</div>
  <div class="card"><h2>Cópia dos seus dados</h2><p class="small muted">Os registros ficam neste navegador. Exporte uma cópia antes de limpar os dados, usar outro navegador ou trocar de aparelho. Não há sincronização automática. A cópia contém seus valores e não tem senha.</p><div class="actions">${btn('export','Exportar cópia')}${btn('import','Restaurar cópia')}</div></div>
- <p class="privacy">Três Bancos · versão web 1.3<br>Sem cadastro ou anúncios. O site precisa de internet para abrir; os registros são salvos localmente neste navegador. O aplicativo não envia seus lançamentos ao servidor. A consulta opcional de saldos depende da configuração privada e da autorização no Meu Pluggy. Não faz Pix, paga contas ou lê notificações no site.</p>`;
+ <p class="privacy">Três Bancos · versão web 1.4<br>Sem cadastro ou anúncios. O site precisa de internet para abrir; os registros são salvos localmente neste navegador. O aplicativo não envia seus lançamentos ao servidor. A consulta opcional de saldos depende da configuração privada e da autorização no Meu Pluggy. Não faz Pix, paga contas ou lê notificações no site.</p>`;
 }
 function entry(kind='expense',prefill={}){
  const fromDraft=prefill.draft;draft=fromDraft||null;
@@ -172,4 +172,4 @@ let displayedDay=C.today();
 function refreshDate(){const day=C.today();if(day!==displayedDay&&!modal.open){displayedDay=day;month=day.slice(0,7);render();}}
 window.addEventListener('focus',()=>{window.refreshNative();refreshDate();});
 setInterval(()=>{if(!document.hidden&&!modal.open){window.refreshNative();refreshDate();}},5000);
-boot();
+AuthUI.start(boot);
