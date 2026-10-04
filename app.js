@@ -18,7 +18,7 @@ function bank(id){return state.accounts.find(a=>a.id===id);}
 function options(selected){return state.accounts.map(a=>`<option value="${a.id}" ${a.id===selected?'selected':''}>${esc(a.name)} · ${roles[a.role]}</option>`).join('');}
 function btn(action,text,cls='',extra=''){return `<button type="button" class="btn ${cls}" data-action="${action}" ${extra}>${text}</button>`;}
 function moneyField(id,label,value='',required=true){return `<label for="${id}">${label}</label><input id="${id}" name="${id}" inputmode="decimal" placeholder="0,00" value="${esc(value)}" ${required?'required':''} maxlength="16" autocomplete="off">`;}
-function errorForm(e){const target=$('form-error');if(target)target.textContent=e.message||String(e);else toast(e.message||String(e));}
+function errorForm(e){const target=modal.open?modal.querySelector('#form-error'):$('form-error');if(target)target.textContent=e.message||String(e);else toast(e.message||String(e));}
 function openModal(title,html){$('modal-title').textContent=title;$('modal-body').innerHTML=html;modal.showModal();}
 function closeModal(){modal.close();draft=null;}
 function boot(){try{if(native){const data=JSON.parse(Android.load());if(data.error)throw Error(data.error);if(data.state)state=C.validate(data.state);queue=data.queue||[];access=data.notificationsEnabled;}else{const saved=webStore.load();if(saved)state=saved;}}catch(e){app.innerHTML=`<div class="warning">${esc(e.message)} Os dados existentes foram preservados. Reabra a página ou verifique se o navegador permite armazenamento local.</div>`;return;}render();}
@@ -31,7 +31,7 @@ function render(){
   const pending=queue.filter(q=>!state.transactions.some(t=>t.sourceId===q.id&&!t.void));
   $('badge').textContent=pending.length||'';
   if(!state.setup){renderSetup();return;}
-  if(tab==='home')renderHome();else if(tab==='bills')renderBills();else if(tab==='queue')renderQueue();else renderSettings();
+  if(tab==='home')renderHome();else if(tab==='bills')renderBills();else if(tab==='goals')renderGoals();else if(tab==='queue')renderQueue();else renderSettings();
 }
 function renderSetup(){
  app.innerHTML=`<div class="setup-step">PRIMEIRO PASSO</div><h1>Um banco para cada destino.</h1><p class="muted">Confirme o saldo atual de cada conta. Você pode trocar as funções depois.</p>
@@ -42,16 +42,18 @@ function renderSetup(){
 }
 function renderHome(){
  const b=C.balances(state),day=C.roleAccount(state,'daily'),savings=C.roleAccount(state,'save'),fixed=C.roleAccount(state,'bills');
- const today=C.today(),days=C.workingDays(today),dailyReference=Math.floor(state.weekly.daily/5),dailyAllowance=Math.min(dailyReference,Math.floor(Math.max(0,b[day.id])/Math.max(1,days)));
+ const today=C.today(),planning=P.settings(state),nextPay=P.dates(today,P.shift(today,7)).find(d=>planning.paymentMode==='weekly'?P.weekday(d)===planning.payday:planning.workdays.includes(P.weekday(d)));
+ const days=P.dates(today,P.shift(nextPay,-1)).filter(d=>planning.spendDays.includes(P.weekday(d))).length,dailyReference=Math.ceil(state.weekly.daily/planning.spendDays.length),dailyAllowance=Math.min(dailyReference,Math.floor(Math.max(0,b[day.id])/Math.max(1,days)));
  const unpaid=state.bills.reduce((n,bill)=>n+Math.max(0,bill.amount-C.paid(state,bill.id,month)),0);
  const savingsBalance=Math.max(0,b[savings.id]),goal=state.weekly.goal;
  const last=[...state.transactions].filter(t=>!t.void).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id)).slice(0,5);
  app.innerHTML=`<div class="eyebrow">${new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'numeric',month:'long'}).format(new Date())}</div><h1>Seu dinheiro organizado.</h1>
- <section class="hero"><div class="eyebrow">${esc(day.name)} · Dia a dia</div><div class="amount">${C.money(b[day.id])}</div><div class="hero-foot"><div>Referência por dia útil<strong>${C.money(dailyAllowance)}</strong></div><div>Próximo recebimento<strong>Sáb, ${shortDate(C.nextSaturday(today))}</strong></div></div></section>
- <p class="small muted">Saldos registrados, sem consulta ao banco. Limite diário de referência: ${C.money(dailyReference)}; ajuste para outros gastos.</p>
+ <section class="hero"><div class="eyebrow">${esc(day.name)} · Dia a dia</div><div class="amount">${C.money(b[day.id])}</div><div class="hero-foot"><div>Referência diária de gastos<strong>${C.money(dailyAllowance)}</strong></div><div>Próximo recebimento<strong>${weekdayShort[P.weekday(nextPay)]}, ${shortDate(nextPay)}</strong></div></div></section>
+ <p class="small muted">Saldos registrados, sem consulta ao banco. Orçamento por dia de gastos: ${C.money(dailyReference)}; ajuste para outras despesas.</p>
  <div class="actions">${btn('expense','− Registrar gasto','primary')}${btn('income','+ Recebi dinheiro')}</div>
+ ${goalOverview()}
  <section class="section"><div class="heading"><h2>Seus três bancos</h2>${btn('transfer','Transferir','subtle')}</div><div class="banks">${state.accounts.map(a=>`<div class="bank"><div class="bank-icon ${a.id}">${bankMark[a.id]}</div><div><strong>${esc(a.name)}</strong><div class="role">${roles[a.role]}</div></div><div class="bank-value"><strong>${C.money(b[a.id])}</strong><small>Saldo registrado</small></div></div>`).join('')}</div></section>
- <section class="section"><div class="heading"><h2>Seu próximo sábado</h2>${btn('plan','Ver divisão','subtle')}</div><div class="card"><div class="row"><span>Planejamento de entrada</span><strong>${C.money(state.weekly.daily+state.weekly.fixed+state.weekly.saving)}</strong></div><p class="small muted">Calcule a divisão com o valor que realmente receber. Só registre transferências depois de fazê-las no banco.</p></div></section>
+ <div class="right">${btn('plan','Simular divisão do recebimento','subtle')}</div>
  <div class="card"><div class="row"><h3>Contas do mês</h3><strong>${C.money(unpaid)}</strong></div><p class="small muted">Ainda a pagar · ${month.split('-').reverse().join('/')}</p><p class="small">${b[fixed.id]>=unpaid?'Saldo registrado suficiente para essas contas.':`Faltam ${C.money(unpaid-Math.max(0,b[fixed.id]))} no banco de contas.`}</p>${btn('show-bills','Conferir contas','subtle')}</div>
  <div class="card"><div class="row"><h3>Sua primeira reserva</h3><strong>${C.money(savingsBalance)}</strong></div><div class="progress" role="progressbar" aria-label="Meta da reserva" aria-valuemin="0" aria-valuemax="${goal||1}" aria-valuenow="${Math.min(savingsBalance,goal||1)}"><div id="save-progress"></div></div><p class="small muted">Meta: ${C.money(goal)} · ${esc(savings.name)}</p></div>
  <section class="section"><div class="heading"><h2>Últimos movimentos</h2>${btn('history','Ver todos','subtle')}</div>${last.length?`<div class="card">${last.map(historyRow).join('')}</div>`:'<div class="empty">Seus lançamentos aparecerão aqui.<br>O saldo inicial não conta como renda nova.</div>'}</section>`;
@@ -71,14 +73,14 @@ function renderQueue(){
  <p class="note">Um Pix entre seus bancos é uma transferência: não é renda nem despesa. Se os dois bancos avisarem, registre uma única transferência e ignore o segundo aviso.</p><p class="small muted">Avisos ocultos, sem valor ou com texto não reconhecido precisam de registro manual. Compras no crédito não devem ser lançadas como débito.</p>${pending.length>=300?'<div class="warning">A fila atingiu 300 avisos. Confira ou ignore os pendentes para voltar a receber sugestões.</div>':''}`;
 }
 function renderSettings(){
- app.innerHTML=`<div class="eyebrow">Do seu jeito</div><h1>Ajustes</h1><form id="settings-form"><div class="card"><h2>Função de cada banco</h2>${state.accounts.map(a=>`<label for="role-${a.id}">${esc(a.name)}</label><select id="role-${a.id}">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${a.role===k?'selected':''}>${v}</option>`).join('')}</select>`).join('')}<p class="small muted">Trocar a função não transfere dinheiro.</p></div>
+ app.innerHTML=`<div class="eyebrow">Do seu jeito</div><h1>Ajustes</h1><div class="card"><h2>Metas para o mês</h2><p class="small muted">Configure dias de trabalho, recebimento, gastos e a sobra desejada.</p>${btn('goal-settings','Configurar metas','primary full')}</div><form id="settings-form"><div class="card"><h2>Função de cada banco</h2>${state.accounts.map(a=>`<label for="role-${a.id}">${esc(a.name)}</label><select id="role-${a.id}">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${a.role===k?'selected':''}>${v}</option>`).join('')}</select>`).join('')}<p class="small muted">Trocar a função não transfere dinheiro.</p></div>
  <div class="card"><h2>Plano de cada sábado</h2>${moneyField('weekly-daily','Alimentação e condução',inputMoney(state.weekly.daily))}${moneyField('weekly-fixed','Separar para contas',inputMoney(state.weekly.fixed))}${moneyField('weekly-saving','Meta de guardar por semana',inputMoney(state.weekly.saving))}${moneyField('weekly-goal','Meta da reserva',inputMoney(state.weekly.goal))}</div>
  <div class="card"><h2>Valores das contas mensais</h2>${state.bills.map(b=>moneyField('bill-'+b.id,esc(b.name),inputMoney(b.amount))+`<label for="due-${b.id}">Vencimento de ${esc(b.name)} (dia 1 a 28)</label><input id="due-${b.id}" type="number" min="1" max="28" value="${b.end}" required>`).join('')}<p class="small muted">Valores de referência. Ao pagar, registre o valor real. Os pagamentos já registrados são preservados.</p></div>
  <div id="form-error" class="form-error" role="alert"></div><button class="btn primary full" type="submit">Salvar ajustes</button></form>
  <div class="card section"><h2>Notificações dos bancos</h2><p class="small muted">${native?(access?'Acesso permitido pelo Android.':'Acesso ainda não permitido pelo Android.'):'A leitura funciona somente no Android.'}</p>${native?`<label class="check"><input id="capture" type="checkbox" ${state.capture?'checked':''}>Guardar sugestões dos três bancos</label>${btn('enable-notifications','Abrir permissão do Android','full')}`:'<p class="small muted">Use Registrar gasto, Recebi dinheiro e Transferir no Resumo.</p>'}</div>
  <div class="card"><h2>Conferir saldos</h2><p class="small muted">Se um lançamento ficou de fora, registre-o. Se precisar acertar o saldo atual, use um ajuste; ele não conta como renda.</p>${btn('reconcile','Ajustar saldo registrado','full')}</div>
  <div class="card"><h2>Cópia dos seus dados</h2><p class="small muted">Os registros ficam neste navegador. Exporte uma cópia antes de limpar os dados, usar outro navegador ou trocar de aparelho. Não há sincronização automática. A cópia contém seus valores e não tem senha.</p><div class="actions">${btn('export','Exportar cópia')}${btn('import','Restaurar cópia')}</div></div>
- <p class="privacy">Três Bancos · versão web 1.1<br>Sem cadastro ou anúncios. O site precisa de internet para abrir; os registros são salvos localmente neste navegador. O aplicativo não envia seus lançamentos a um servidor. Não faz Pix, paga contas, lê notificações ou consulta seu saldo bancário.</p>`;
+ <p class="privacy">Três Bancos · versão web 1.2<br>Sem cadastro ou anúncios. O site precisa de internet para abrir; os registros são salvos localmente neste navegador. O aplicativo não envia seus lançamentos a um servidor. Não faz Pix, paga contas, lê notificações ou consulta seu saldo bancário.</p>`;
 }
 function entry(kind='expense',prefill={}){
  const fromDraft=prefill.draft;draft=fromDraft||null;
@@ -111,6 +113,8 @@ document.addEventListener('click',e=>{
   else if(['expense','income','transfer'].includes(action))entry(action);
   else if(action==='show-bills'){tab='bills';render();window.scrollTo(0,0);}
   else if(action==='plan')plan();
+  else if(action==='goal-settings')goalSettings();
+  else if(action==='show-goals'){tab='goals';render();window.scrollTo(0,0);}
   else if(action==='history')history();
   else if(action==='pay-bill'){const b=state.bills.find(b=>b.id===el.dataset.id);entry('expense',{account:C.roleAccount(state,'bills').id,cents:Math.max(0,b.amount-C.paid(state,b.id,month)),bill:b.id,billMonth:month,note:b.name});}
   else if(action==='review'){const q=queue.find(q=>q.id===el.dataset.id);entry(q.kind==='review'?'expense':q.kind,{account:q.bank,cents:q.cents,draft:q,date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date(q.time))});}
@@ -135,6 +139,13 @@ document.addEventListener('submit',e=>{e.preventDefault();try{
  if(e.target.id==='setup-form'){
   const next=JSON.parse(JSON.stringify(state));for(const a of next.accounts)a.opening=C.parseMoney($('open-'+a.id).value);
   next.startDate=$('start-date').value;if(!C.validDate(next.startDate)||next.startDate>C.today())throw Error('Escolha uma data até hoje.');next.setup=true;persist(next);render();window.scrollTo(0,0);toast('Controle iniciado com seus saldos.');
+ }else if(e.target.id==='goals-form'){
+  const next=JSON.parse(JSON.stringify(state));
+  next.planning={configured:true,workdays:[...e.target.querySelectorAll('[name="workdays"]:checked')].map(x=>Number(x.value)),spendDays:[...e.target.querySelectorAll('[name="spendDays"]:checked')].map(x=>Number(x.value)),paymentMode:$('goal-mode').value,payday:Number($('goal-payday').value),buffer:C.parseMoney($('goal-buffer').value),protectReserve:$('goal-protect').checked};
+  if(!next.planning.workdays.length||!next.planning.spendDays.length)throw Error('Selecione pelo menos um dia de trabalho e um dia de gastos.');
+  next.weekly.daily=C.parseMoney($('goal-living').value);
+  for(const b of next.bills){b.amount=C.parseMoney($('goal-bill-'+b.id).value);b.start=b.end=Number($('goal-due-'+b.id).value);}
+  persist(next);closeModal();tab='goals';render();window.scrollTo(0,0);toast('Metas calculadas com o seu plano.');
  }else if(e.target.id==='settings-form'){
   const next=JSON.parse(JSON.stringify(state));for(const a of next.accounts)a.role=$('role-'+a.id).value;if(new Set(next.accounts.map(a=>a.role)).size!==3)throw Error('Escolha uma função diferente para cada banco.');
   for(const k of ['daily','fixed','saving','goal'])next.weekly[k]=C.parseMoney($('weekly-'+k).value);for(const b of next.bills){b.amount=C.parseMoney($('bill-'+b.id).value);b.start=b.end=Number($('due-'+b.id).value);}persist(next);render();toast('Ajustes salvos.');
@@ -157,6 +168,8 @@ window.restoreBackup=function(text){try{const restored=C.validate(JSON.parse(tex
 function exportWebBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='tres-bancos-'+C.today()+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Cópia preparada para download.');}
 $('backup-file').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>10*1024*1024)throw Error('Arquivo maior que 10 MB.');const text=await file.text();const restored=C.validate(JSON.parse(text));if(!confirm('Restaurar esta cópia substituirá os registros deste navegador. Deseja continuar?'))return;restored.capture=false;persist(restored);tab='home';render();toast('Cópia restaurada neste navegador.');}catch(e){toast('Cópia não restaurada: '+e.message);}});
 window.addEventListener('storage',e=>{if(e.key!==WebStore.KEY)return;try{const saved=webStore.load();if(modal.open)closeModal();state=saved||C.initial();render();toast('Dados atualizados por outra aba.');}catch(e){toast(e.message);}});
-window.addEventListener('focus',()=>window.refreshNative());
-setInterval(()=>{if(!document.hidden&&!modal.open)window.refreshNative();},5000);
+let displayedDay=C.today();
+function refreshDate(){const day=C.today();if(day!==displayedDay&&!modal.open){displayedDay=day;month=day.slice(0,7);render();}}
+window.addEventListener('focus',()=>{window.refreshNative();refreshDate();});
+setInterval(()=>{if(!document.hidden&&!modal.open){window.refreshNative();refreshDate();}},5000);
 boot();
