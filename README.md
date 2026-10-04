@@ -24,13 +24,17 @@ A meta diária é uma média equivalente pelos dias de trabalho restantes cujo p
 
 A previsão é do mês atual e depende das contas, saldos e gastos informados. Não inventa renda futura ou pendências de meses anteriores. Ao mudar o mês ou registrar movimentos, o plano é recalculado. Cópias antigas continuam funcionando; basta configurar as metas sem apagar os lançamentos.
 
+## Conexão bancária opcional
+
+Em Ajustes → Conexão bancária estão as instruções para o Meu Pluggy. A consulta e a conferência de saldos estão implementadas em um servidor privado opcional, mas exigem cadastro, autorização e credenciais. O site no GitHub Pages continua sem conexão direta aos bancos. Veja [INTEGRACAO-BANCARIA.md](INTEGRACAO-BANCARIA.md) para ativação, limitações e validação pendente com contas reais. Não há importação automática do extrato nesta etapa.
+
 ## Dados e limites
 
 - Os dados são salvos em `localStorage` neste navegador e endereço. Limpar os dados do site ou usar navegação privada pode apagá-los.
-- Não há cadastro, servidor financeiro, conexão bancária ou sincronização entre aparelhos, navegadores ou APK.
+- Na versão pública estática, não há servidor financeiro ou consulta bancária. A conexão opcional usa o servidor privado descrito no guia. Os registros não sincronizam entre aparelhos, navegadores ou APK.
 - O site precisa de internet para abrir e não lê notificações do Android. A leitura de notificações pertence ao APK.
 - Cópias JSON da versão 1 do APK são compatíveis. Importar uma cópia é uma substituição, não uma mesclagem.
-- Os saldos são os registrados por você, não saldos consultados nos bancos. O site não realiza pagamentos ou transferências.
+- Os saldos são os registrados por você, incluindo conferências bancárias aplicadas explicitamente na versão privada. Consultar novamente uma mesma atualização não reaplica ajustes. O site não realiza pagamentos ou transferências.
 - As cópias contêm informações financeiras sem criptografia; guarde-as em local privado. Não as envie ao repositório.
 
 ## Desenvolvimento

@@ -47,6 +47,10 @@
     for(const k of ['daily','fixed','saving','goal'])if(!s.weekly||!Number.isSafeInteger(s.weekly[k])||s.weekly[k]<0||s.weekly[k]>10000000000)throw Error('Plano inválido.');
     const ids=new Set();for(const t of s.transactions){if(typeof t.id!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(t.id)||ids.has(t.id)||!TYPES.includes(t.kind)||!BANKS.includes(t.account)||!validDate(t.date)||t.date<s.startDate||!Number.isSafeInteger(t.cents)||Math.abs(t.cents)>10000000000||t.cents===0||(t.kind!=='adjust'&&t.cents<0)||(t.to&&(!BANKS.includes(t.to)||t.to===t.account))||(t.kind==='transfer'&&!t.to)||(t.bill&&(!bid.has(t.bill)||!/^\d{4}-(0[1-9]|1[0-2])$/.test(t.billMonth)))||(t.note&&typeof t.note!=='string')||(t.sourceId&&!/^[a-zA-Z0-9_-]{1,100}$/.test(t.sourceId)))throw Error('Lançamento inválido na cópia.');ids.add(t.id);}
     if(s.planning!==undefined){const p=s.planning;if(!p||typeof p.configured!=='boolean'||typeof p.protectReserve!=='boolean'||!['daily','weekly'].includes(p.paymentMode)||!Number.isInteger(p.payday)||p.payday<0||p.payday>6||!Number.isSafeInteger(p.buffer)||p.buffer<0||p.buffer>10000000000)throw Error('Metas inválidas na cópia.');for(const key of ['workdays','spendDays'])if(!Array.isArray(p[key])||!p[key].length||p[key].length>7||new Set(p[key]).size!==p[key].length||p[key].some(d=>!Number.isInteger(d)||d<0||d>6))throw Error('Dias inválidos nas metas.');}
+    if(s.bankSync!==undefined){
+      if(!s.bankSync||typeof s.bankSync!=='object'||Array.isArray(s.bankSync))throw Error('Conferência bancária inválida.');
+      for(const [id,v] of Object.entries(s.bankSync))if(!BANKS.includes(id)||!v||typeof v.sourceId!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(v.sourceId)||typeof v.version!=='string'||!/^[a-f0-9]{64}$/.test(v.version)||![v.updatedAt,v.appliedAt].every(d=>typeof d==='string'&&/^\d{4}-\d\d-\d\dT/.test(d)&&Number.isFinite(Date.parse(d))))throw Error('Conferência bancária inválida.');
+    }
     for(const n of Object.values(balances(s)))if(!Number.isSafeInteger(n))throw Error('Saldo fora do limite.');
     return s;
   }

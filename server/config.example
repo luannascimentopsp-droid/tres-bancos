@@ -1,0 +1,11 @@
+# Copie para .env.private fora de qualquer pasta publicada. Nunca faça commit desse arquivo preenchido.
+# Node.js 22+: node --env-file=C:/caminho/privado/.env.private server/server.cjs
+APP_ACCESS_KEY=
+PLUGGY_CLIENT_ID=
+PLUGGY_CLIENT_SECRET=
+# IDs das conexões proxy do Meu Pluggy na aplicação demo, separados por vírgula.
+PLUGGY_ITEM_IDS=
+# Para uso local:
+HOST=127.0.0.1
+PORT=8787
+# Para hospedar: configurar PUBLIC_ORIGIN=https://seu-dominio e HOST=0.0.0.0, com proxy HTTPS.
