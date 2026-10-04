@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#10251f"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="description" content="Organize seus saldos, contas e reserva com o Três Bancos. Controle pessoal salvo no seu navegador."><link rel="icon" href="favicon.svg" type="image/svg+xml"><title>Três Bancos — seu dinheiro organizado</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><div class="brand"><span class="brand-bars" aria-hidden="true"><i></i><i></i><i></i></span><span>três bancos<small>Seu dinheiro, com destino.</small></span></div><span class="local">Neste navegador</span></header>
+<main id="app" aria-live="polite"></main>
+<nav id="nav" aria-label="Telas do controle"><button data-tab="home" class="active"><span aria-hidden="true">◫</span>Resumo</button><button data-tab="bills"><span aria-hidden="true">▤</span>Contas</button><button data-tab="queue"><span aria-hidden="true">◎</span>Avisos <b id="badge"></b></button><button data-tab="settings"><span aria-hidden="true">≡</span>Ajustes</button></nav>
+<dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button class="close" data-action="close" aria-label="Fechar">×</button></div><div id="modal-body"></div></dialog>
+<div id="toast" role="status" hidden></div>
+<input id="backup-file" type="file" accept="application/json,.json" hidden><script src="core.js"></script><script src="web-store.js"></script><script src="app.js"></script>
+</body></html>
