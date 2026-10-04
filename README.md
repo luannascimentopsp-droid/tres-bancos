@@ -1,4 +1,4 @@
-# Três Bancos
+# Facilitador Financeiro 
 
 Controle financeiro pessoal para organizar C6 Bank, Nubank e Mercado Pago em três funções: dia a dia, contas fixas e reserva.
 
