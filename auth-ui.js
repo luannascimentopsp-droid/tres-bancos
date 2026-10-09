@@ -23,6 +23,6 @@ window.AuthUI=(()=>{
   window.addEventListener('pageshow',e=>{if(e.persisted){hide();location.reload();}});
   window.addEventListener('pagehide',hide);
  }
- async function request(url){const r=await fetch(url,{credentials:'same-origin',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(60000)});if(r.status===401){lock();throw Error('Sessão encerrada. Entre novamente.');}return r;}
- return {start,request,logout};
+ async function request(url,options={}){const r=await fetch(url,{...options,headers:{...(options.method==='POST'?{'Content-Type':'application/json','X-CSRF-Token':session?.csrf||''}:{}),...options.headers},credentials:'same-origin',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(60000)});if(r.status===401){lock();throw Error('Sessão encerrada. Entre novamente.');}return r;}
+ return {start,request,logout,get username(){return session?.username;}};
 })();

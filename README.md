@@ -36,10 +36,18 @@ A previsão é do mês atual e depende das contas, saldos e gastos informados. N
 
 Em Ajustes → Conexão bancária estão as instruções para o Meu Pluggy. A consulta e a conferência de saldos estão implementadas em um servidor privado opcional, mas exigem cadastro, autorização e credenciais. O site no GitHub Pages continua sem conexão direta aos bancos. Veja [INTEGRACAO-BANCARIA.md](INTEGRACAO-BANCARIA.md) para ativação, limitações e validação pendente com contas reais. Não há importação automática do extrato nesta etapa.
 
+## Salvamento automático e sincronização
+
+Ajustes e metas válidos são salvos automaticamente após a edição, sem fechar o formulário. Campos incompletos ou inválidos não substituem os dados anteriores. Novas entradas, despesas, transferências, restaurações e conferências de saldo continuam dependendo de confirmação no formulário, e passam pela mesma persistência após salvar.
+
+A sincronização web entre aparelhos usa o mesmo login e um banco PostgreSQL, configurado por `DATABASE_URL` exclusivamente no servidor. Sem essa variável, o site continua salvando neste navegador e informa que a sincronização não está configurada. Consulte [SINCRONIZACAO.md](SINCRONIZACAO.md) para ativar.
+
+Cada alteração fica primeiro no navegador e depois é enviada com controle de versão. Quedas de conexão deixam os dados pendentes para nova tentativa. Alterações concorrentes não são mescladas automaticamente: o usuário escolhe qual versão manter e ambas são preservadas em uma cópia local antes da resolução. O topo da página informa o estado de sincronização. A consulta ocorre ao abrir, voltar à janela e a cada dez segundos enquanto visível; formulários em edição não são substituídos.
+
 ## Dados e limites
 
 - Os dados são salvos em `localStorage` neste navegador e endereço. Limpar os dados do site ou usar navegação privada pode apagá-los.
-- Na versão pública estática, não há servidor financeiro ou consulta bancária. A conexão opcional usa o servidor privado descrito no guia. Os registros não sincronizam entre aparelhos, navegadores ou APK.
+- Na versão pública estática, não há servidor financeiro ou consulta bancária. A conexão opcional usa o servidor privado descrito no guia. Com o PostgreSQL configurado, os registros sincronizam entre navegadores com o mesmo login. O APK continua separado.
 - O site precisa de internet para abrir e não lê notificações do Android. A leitura de notificações pertence ao APK.
 - Cópias JSON da versão 1 do APK são compatíveis. Importar uma cópia é uma substituição, não uma mesclagem.
 - Os saldos são os registrados por você, incluindo conferências bancárias aplicadas explicitamente na versão privada. Consultar novamente uma mesma atualização não reaplica ajustes. O site não realiza pagamentos ou transferências.
@@ -47,7 +55,7 @@ Em Ajustes → Conexão bancária estão as instruções para o Meu Pluggy. A co
 
 ## Desenvolvimento
 
-Site estático, sem etapa de compilação ou dependências de produção. Sirva a pasta por HTTP para desenvolvimento. Verifique a lógica com Node.js:
+Servidor Node.js 22 com PostgreSQL opcional. Instale as dependências com `npm ci --include=dev --ignore-scripts`. Para testes de persistência, a suíte usa PostgreSQL embarcado (PGlite), sem conta externa. Verifique com:
 
 ```sh
 node --test tests/*.test.cjs

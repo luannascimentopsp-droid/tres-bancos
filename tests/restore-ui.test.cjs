@@ -61,3 +61,32 @@ test('bills month selection does not change home or history totals; home shortcu
  app.listeners.get('click')({target:{closest:selector=>selector==='[data-action]'?{dataset:{action:'show-bills'}}:null}});
  assert.match(app.element('app').innerHTML,new RegExp(`value="${currentMonth}"`));
 });
+function settingsFields(app,state){
+ for(const a of state.accounts)app.element('role-'+a.id).value=a.role;
+ for(const [key,cents] of Object.entries(state.weekly))app.element('weekly-'+key).value=(cents/100).toFixed(2).replace('.',',');
+ for(const b of state.bills){app.element('bill-'+b.id).value=(b.amount/100).toFixed(2).replace('.',',');app.element('due-'+b.id).value=String(b.end);}
+ return {id:'settings-form',checkValidity:()=>true};
+}
+test('settings autosave persists edits without submitting, rerendering the form, or adding movements',()=>{
+ const state=fixture(),app=ui(state),form=settingsFields(app,state),before=app.element('app').innerHTML;
+ app.element('bill-net').value='135,00';
+ app.listeners.get('input')({type:'input',target:{id:'bill-net',closest:()=>form}});
+ assert.equal(app.run('flushAutoSave()'),true);
+ const saved=JSON.parse(app.data.get(WebStore.KEY));assert.equal(saved.bills.find(b=>b.id==='net').amount,13500);
+ assert.deepEqual(saved.transactions,state.transactions);assert.equal(app.element('app').innerHTML,before);
+ assert.match(app.element('autosave-status').textContent,/salvas automaticamente/);
+ assert.equal(JSON.parse(ui(saved).run('JSON.stringify(state)')).bills.find(b=>b.id==='net').amount,13500);
+});
+test('invalid autosave preserves saved records, retains the edit, then saves after correction',()=>{
+ const state=fixture(),app=ui(state),form=settingsFields(app,state),before=app.data.get(WebStore.KEY);
+ app.element('bill-net').value='';app.listeners.get('change')({type:'change',target:{id:'bill-net',closest:()=>form}});
+ assert.equal(app.data.get(WebStore.KEY),before);assert.match(app.element('autosave-status').textContent,/Não salvo/);
+ assert.equal(app.run('autoSaveForm!==null'),true);
+ app.element('bill-net').value='135,00';app.listeners.get('change')({type:'change',target:{id:'bill-net',closest:()=>form}});
+ assert.equal(JSON.parse(app.data.get(WebStore.KEY)).bills.find(b=>b.id==='net').amount,13500);
+});
+test('a transaction draft never creates a movement through autosave',()=>{
+ const state=fixture(),app=ui(state),before=app.data.get(WebStore.KEY);
+ app.listeners.get('input')({type:'input',target:{id:'value',closest:()=>({id:'entry-form'})}});
+ assert.equal(app.run('autoSaveForm'),null);assert.equal(app.data.get(WebStore.KEY),before);
+});

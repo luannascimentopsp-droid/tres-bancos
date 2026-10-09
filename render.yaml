@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     branch: main
-    buildCommand: node --test tests/*.test.cjs
+    buildCommand: npm ci --include=dev --ignore-scripts --no-audit --no-fund && npm test
     startCommand: node server/server.cjs
     healthCheckPath: /api/auth/availability
     autoDeployTrigger: off

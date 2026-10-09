@@ -8,10 +8,71 @@ const bankMark={c6:'C6',nu:'nu',mp:'MP'};
 const kindLabel={expense:'Despesa',income:'Entrada',transfer:'Transferência',adjust:'Ajuste de saldo'};
 let state=C.initial(),queue=[],access=false,tab='home',month=C.today().slice(0,7),draft=null,toastTimer;
 const app=$('app'),modal=$('modal');
-const webStore=native?null:new WebStore(()=>window.localStorage,C.validate);
+let webStore=native?null:new WebStore(()=>window.localStorage,C.validate);
 function toast(msg){$('toast').textContent=msg;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4200);}
 function persist(next){C.validate(next);if(native){const error=Android.save(JSON.stringify(next));if(error)throw Error(error);}else webStore.save(next);state=next;}
 function mutate(fn){const next=JSON.parse(JSON.stringify(state));fn(next);persist(next);render();}
+
+let autoSaveForm=null,autoSaveTimer;
+function saveSettings(){
+  const next=JSON.parse(JSON.stringify(state));for(const a of next.accounts)a.role=$('role-'+a.id).value;if(new Set(next.accounts.map(a=>a.role)).size!==3)throw Error('Escolha uma função diferente para cada banco.');
+  for(const k of ['daily','fixed','saving','goal'])next.weekly[k]=C.parseMoney($('weekly-'+k).value);for(const b of next.bills){b.amount=C.parseMoney($('bill-'+b.id).value);b.start=b.end=Number($('due-'+b.id).value);}persist(next);
+}
+function saveGoals(form){
+  const next=JSON.parse(JSON.stringify(state));
+  next.planning={configured:true,workdays:[...form.querySelectorAll('[name="workdays"]:checked')].map(x=>Number(x.value)),spendDays:[...form.querySelectorAll('[name="spendDays"]:checked')].map(x=>Number(x.value)),paymentMode:$('goal-mode').value,payday:Number($('goal-payday').value),buffer:C.parseMoney($('goal-buffer').value),protectReserve:$('goal-protect').checked};
+  if(!next.planning.workdays.length||!next.planning.spendDays.length)throw Error('Selecione pelo menos um dia de trabalho e um dia de gastos.');
+  next.weekly.daily=C.parseMoney($('goal-living').value);
+  for(const b of next.bills){b.amount=C.parseMoney($('goal-bill-'+b.id).value);b.start=b.end=Number($('goal-due-'+b.id).value);}
+  persist(next);
+}
+function autoSaveMessage(text){const status=$('autosave-status');if(status)status.textContent=text;}
+function autoSaveDone(){clearTimeout(autoSaveTimer);autoSaveForm=null;autoSaveMessage('Alterações salvas automaticamente neste navegador.');}
+function flushAutoSave(){
+ if(!autoSaveForm)return true;
+ try{
+  if(autoSaveForm.checkValidity&&!autoSaveForm.checkValidity())throw Error('Confira os campos incompletos ou inválidos.');
+  if(autoSaveForm.id==='settings-form')saveSettings();else saveGoals(autoSaveForm);
+  autoSaveDone();const error=$('form-error');if(error)error.textContent='';return true;
+ }catch(error){autoSaveMessage('Não salvo: '+error.message);return false;}
+}
+function scheduleAutoSave(event){
+ const form=event.target.closest?.('form');if(!form||!['settings-form','goals-form'].includes(form.id))return;
+ autoSaveForm=form;clearTimeout(autoSaveTimer);autoSaveMessage('Salvando alterações…');
+ if(event.type==='change')flushAutoSave();else autoSaveTimer=setTimeout(flushAutoSave,600);
+}
+document.addEventListener('input',scheduleAutoSave);
+document.addEventListener('change',scheduleAutoSave);
+window.addEventListener('beforeunload',event=>{if(!flushAutoSave()){event.preventDefault();event.returnValue='';}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushAutoSave();});
+
+
+let cloudStore=null,cloudStatus='local';
+function setCloudStatus(status){
+ cloudStatus=status;const label=document.querySelector?.('header .local');if(label)label.textContent=cloudStore?'Sua conta':'Neste navegador';
+ const box=$('sync-status');if(!box)return;
+ const labels={local:'Salvo neste navegador · Sincronização entre aparelhos não configurada.',pending:'Salvo neste navegador · Aguardando sincronização.',sending:'Sincronizando alterações…',synced:'Sincronizado com sua conta.',offline:'Sem conexão com a sincronização · Dados guardados neste navegador.',conflict:'Há alterações diferentes em outro aparelho. Escolha qual versão usar.', 'import-preserved':'Versão online carregada. A cópia anterior deste navegador foi preservada.'};
+ box.innerHTML=esc(labels[status]||labels.local)+(status==='conflict'?'<div class="actions">'+btn('sync-export','Baixar minha cópia','subtle')+btn('sync-remote','Usar versão online','subtle')+btn('sync-local','Enviar minha versão','subtle')+'</div>':'');
+}
+function canReceiveCloud(){return !autoSaveForm&&!modal.open&&!document.activeElement?.closest?.('form');}
+async function startCloud(legacy){
+ app.hidden=true;$('nav').hidden=true;
+ try{
+  const response=await AuthUI.request('/api/state');if(!response.ok)throw Error('Não foi possível verificar a sincronização. Reabra o site para tentar novamente.');
+  const config=await response.json();const hasCache=window.localStorage.getItem('fac.cloud.v1.'+AuthUI.username)!==null;
+  if(config.configured!==true&&!hasCache){app.hidden=false;render();setCloudStatus('local');return;}
+  cloudStore=new CloudStore({storage:window.localStorage,username:AuthUI.username,validate:C.validate,request:(...args)=>AuthUI.request(...args),onStatus:setCloudStatus,canReceive:canReceiveCloud,onRemote:next=>{state=next;render();}});
+  const saved=await cloudStore.open(legacy,C.initial());webStore=cloudStore;state=saved;app.hidden=false;render();
+ }catch(error){app.hidden=false;app.innerHTML='<div class="warning">'+esc(error.message)+' Seus registros locais foram preservados.</div>';$('nav').hidden=true;}
+}
+async function resolveCloud(action){
+ if(!cloudStore)return;
+ if(action==='sync-export'){exportWebBackup();return;}
+ const choice=action==='sync-remote'?'remote':'local';
+ if(!confirm(choice==='remote'?'Usar a versão online neste navegador? A versão local atual ficará guardada como cópia de segurança.':'Substituir a versão online pelos registros deste navegador? Confira sua cópia antes de continuar.'))return;
+ try{await cloudStore.resolve(choice);}catch(error){toast(error.message);}
+}
+
 function shortDate(d){return d.split('-').reverse().slice(0,2).join('/');}
 function fullDate(d){return d.split('-').reverse().join('/');}
 function bank(id){return state.accounts.find(a=>a.id===id);}
@@ -20,12 +81,13 @@ function btn(action,text,cls='',extra=''){return `<button type="button" class="b
 function moneyField(id,label,value='',required=true){return `<label for="${id}">${label}</label><input id="${id}" name="${id}" inputmode="decimal" placeholder="0,00" value="${esc(value)}" ${required?'required':''} maxlength="16" autocomplete="off">`;}
 function errorForm(e){const target=modal.open?modal.querySelector('#form-error'):$('form-error');if(target)target.textContent=e.message||String(e);else toast(e.message||String(e));}
 function openModal(title,html){$('modal-title').textContent=title;$('modal-body').innerHTML=html;modal.showModal();}
-function closeModal(){modal.close();draft=null;}
-function boot(){try{if(native){const data=JSON.parse(Android.load());if(data.error)throw Error(data.error);if(data.state)state=C.validate(data.state);queue=data.queue||[];access=data.notificationsEnabled;}else{const saved=webStore.load();if(saved)state=saved;}}catch(e){app.innerHTML=`<div class="warning">${esc(e.message)} Os dados existentes foram preservados. Reabra a página ou verifique se o navegador permite armazenamento local.</div>`;return;}render();}
+function closeModal(){if(!flushAutoSave())return;modal.close();draft=null;render();}
+function boot(){try{if(native){const data=JSON.parse(Android.load());if(data.error)throw Error(data.error);if(data.state)state=C.validate(data.state);queue=data.queue||[];access=data.notificationsEnabled;}else{const saved=webStore.load();if(saved)state=saved;}}catch(e){app.innerHTML=`<div class="warning">${esc(e.message)} Os dados existentes foram preservados. Reabra a página ou verifique se o navegador permite armazenamento local.</div>`;return;}render();setCloudStatus('local');if(!native&&AuthUI.username&&typeof CloudStore!=='undefined')void startCloud(state.setup?state:null);}
 window.refreshNative=function(){if(!native)return;try{const data=JSON.parse(Android.load());if(data.error){toast(data.error);return;}const changed=JSON.stringify(queue)!==JSON.stringify(data.queue)||access!==data.notificationsEnabled;queue=data.queue||[];access=data.notificationsEnabled;if(changed&&!modal.open)render();}catch(e){toast('Não foi possível atualizar os avisos.');}};
 window.goHome=function(){if(modal.open)closeModal();else{tab='home';render();window.scrollTo(0,0);}};
 window.handleBack=function(){if(modal.open){closeModal();return true;}if(tab!=='home'){window.goHome();return true;}return false;};
 function render(){
+  if(!flushAutoSave())return;
   $('nav').hidden=!state.setup;
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   const pending=queue.filter(q=>!state.transactions.some(t=>t.sourceId===q.id&&!t.void));
@@ -35,7 +97,7 @@ function render(){
 }
 function renderSetup(){
  app.innerHTML=`<div class="setup-step">PRIMEIRO PASSO</div><h1>Um banco para cada destino.</h1><p class="muted">Confirme o saldo atual de cada conta. Você pode trocar as funções depois.</p>
- <div class="card"><h2>Comece com os seus valores</h2><p class="small muted">Informe o saldo disponível em cada banco. Depois, em Ajustes, configure as contas do mês e seu plano semanal. Seus registros ficam neste navegador, sem sincronização automática com o APK ou outros aparelhos.</p></div>
+ <div class="card"><h2>Comece com os seus valores</h2><p class="small muted">Informe o saldo disponível em cada banco. Depois, em Ajustes, configure as contas do mês e seu plano semanal. Seus registros são guardados neste navegador. A sincronização com outros aparelhos depende da ativação indicada no topo da página.</p></div>
  <form id="setup-form"><div class="form-grid">${state.accounts.map(a=>`<div>${moneyField('open-'+a.id,`${esc(a.name)} · ${roles[a.role]}`,'0,00')}</div>`).join('')}</div>
  <label for="start-date">Data desses saldos</label><input type="date" id="start-date" value="${C.today()}" max="${C.today()}" required>
  <p class="note">O aplicativo acompanha os valores que você registra. Ele não consulta nem movimenta dinheiro nos bancos.</p><div id="form-error" class="form-error" role="alert"></div><div class="form-footer"><button class="btn primary full" type="submit">Começar meu controle</button></div></form>`;
@@ -68,19 +130,19 @@ function renderBills(){
 function renderQueue(){
  const pending=queue.filter(q=>!state.transactions.some(t=>t.sourceId===q.id&&!t.void));
  app.innerHTML=`<div class="eyebrow">Pix e débito</div><h1>Avisos para conferir</h1><p class="muted">Um aviso vira lançamento só depois da sua confirmação.</p>
- ${!native?'<div class="warning">No site, registre os movimentos manualmente. A leitura de notificações dos bancos funciona somente no APK instalado no Android. Os dados do site e do APK são separados; use as cópias para transferi-los.</div>':!access||!state.capture?`<div class="card"><h3>Ativar leitura dos bancos</h3><p class="small muted">Capture novos avisos de C6, Nubank e Mercado Pago. O Android pedirá acesso às notificações.</p>${btn('enable-notifications','Configurar leitura','primary full')}</div>`:'<p class="pill">Leitura ativada para os três bancos</p>'}
+ ${!native?'<div class="warning">No site, registre os movimentos manualmente. A leitura de notificações dos bancos funciona somente no APK instalado no Android. A sincronização entre aparelhos funciona pela versão web, quando ativada. O APK continua separado; use cópias para transferir seus dados.</div>':!access||!state.capture?`<div class="card"><h3>Ativar leitura dos bancos</h3><p class="small muted">Capture novos avisos de C6, Nubank e Mercado Pago. O Android pedirá acesso às notificações.</p>${btn('enable-notifications','Configurar leitura','primary full')}</div>`:'<p class="pill">Leitura ativada para os três bancos</p>'}
  <div class="card">${pending.length?pending.map(q=>{const related=state.transactions.some(t=>!t.void&&t.kind==='transfer'&&t.cents===q.cents&&(t.account===q.bank||t.to===q.bank)&&Math.abs(new Date(t.date+'T12:00:00').getTime()-q.time)<86400000);return `<div class="draft"><div class="row"><strong>${esc(bank(q.bank).name)}</strong><strong>${C.money(q.cents)}</strong></div><p>${esc(q.label)}</p><p class="small muted">${new Date(q.time).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})} · ${q.kind==='income'?'Possível entrada':q.kind==='expense'?'Possível saída':'Tipo a confirmar'}</p>${related?'<p class="warning">Existe uma transferência parecida. Confira se este é o segundo aviso do mesmo Pix antes de registrar novamente.</p>':''}<div class="draft-actions">${btn('review','Conferir','primary',`data-id="${q.id}"`)}${btn('dismiss','Ignorar','',`data-id="${q.id}"`)}</div></div>`;}).join(''):'<div class="empty"><strong>Nenhum aviso pendente</strong>Novos avisos reconhecidos aparecerão aqui após ativar a leitura. Você também pode registrar manualmente.</div>'}</div>
  <p class="note">Um Pix entre seus bancos é uma transferência: não é renda nem despesa. Se os dois bancos avisarem, registre uma única transferência e ignore o segundo aviso.</p><p class="small muted">Avisos ocultos, sem valor ou com texto não reconhecido precisam de registro manual. Compras no crédito não devem ser lançadas como débito.</p>${pending.length>=300?'<div class="warning">A fila atingiu 300 avisos. Confira ou ignore os pendentes para voltar a receber sugestões.</div>':''}`;
 }
 function renderSettings(){
- app.innerHTML=`<div class="eyebrow">Do seu jeito</div><h1>Ajustes</h1><div class="card"><h2>Conectar meus bancos</h2><p class="small muted">Prepare a consulta de saldos pelo Meu Pluggy e confira os valores antes de atualizar as metas.</p>${btn('bank-open','Conexão bancária','primary full')}</div><div class="card"><h2>Metas para o mês</h2><p class="small muted">Configure dias de trabalho, recebimento, gastos e a sobra desejada.</p>${btn('goal-settings','Configurar metas','primary full')}</div><form id="settings-form"><div class="card"><h2>Função de cada banco</h2>${state.accounts.map(a=>`<label for="role-${a.id}">${esc(a.name)}</label><select id="role-${a.id}">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${a.role===k?'selected':''}>${v}</option>`).join('')}</select>`).join('')}<p class="small muted">Trocar a função não transfere dinheiro.</p></div>
+ app.innerHTML=`<div class="eyebrow">Do seu jeito</div><h1>Ajustes</h1><div class="card"><h2>Conectar meus bancos</h2><p class="small muted">Prepare a consulta de saldos pelo Meu Pluggy e confira os valores antes de atualizar as metas.</p>${btn('bank-open','Conexão bancária','primary full')}</div><div class="card"><h2>Metas para o mês</h2><p class="small muted">Configure dias de trabalho, recebimento, gastos e a sobra desejada.</p>${btn('goal-settings','Configurar metas','primary full')}</div><form id="settings-form"><p id="autosave-status" class="small muted" role="status">Os ajustes são salvos automaticamente neste navegador.</p><div class="card"><h2>Função de cada banco</h2>${state.accounts.map(a=>`<label for="role-${a.id}">${esc(a.name)}</label><select id="role-${a.id}">${Object.entries(roles).map(([k,v])=>`<option value="${k}" ${a.role===k?'selected':''}>${v}</option>`).join('')}</select>`).join('')}<p class="small muted">Trocar a função não transfere dinheiro.</p></div>
  <div class="card"><h2>Plano de cada sábado</h2>${moneyField('weekly-daily','Alimentação e condução',inputMoney(state.weekly.daily))}${moneyField('weekly-fixed','Separar para contas',inputMoney(state.weekly.fixed))}${moneyField('weekly-saving','Meta de guardar por semana',inputMoney(state.weekly.saving))}${moneyField('weekly-goal','Meta da reserva',inputMoney(state.weekly.goal))}</div>
  <div class="card"><h2>Valores das contas mensais</h2>${state.bills.map(b=>moneyField('bill-'+b.id,esc(b.name),inputMoney(b.amount))+`<label for="due-${b.id}">Vencimento de ${esc(b.name)} (dia 1 a 28)</label><input id="due-${b.id}" type="number" min="1" max="28" value="${b.end}" required>`).join('')}<p class="small muted">Valores de referência. Ao pagar, registre o valor real. Os pagamentos já registrados são preservados.</p></div>
  <div id="form-error" class="form-error" role="alert"></div><button class="btn primary full" type="submit">Salvar ajustes</button></form>
  <div class="card section"><h2>Notificações dos bancos</h2><p class="small muted">${native?(access?'Acesso permitido pelo Android.':'Acesso ainda não permitido pelo Android.'):'A leitura funciona somente no Android.'}</p>${native?`<label class="check"><input id="capture" type="checkbox" ${state.capture?'checked':''}>Guardar sugestões dos três bancos</label>${btn('enable-notifications','Abrir permissão do Android','full')}`:'<p class="small muted">Use Registrar gasto, Recebi dinheiro e Transferir no Resumo.</p>'}</div>
  <div class="card"><h2>Conferir saldos</h2><p class="small muted">Se um lançamento ficou de fora, registre-o. Se precisar acertar o saldo atual, use um ajuste; ele não conta como renda.</p>${btn('reconcile','Ajustar saldo registrado','full')}</div>
- <div class="card"><h2>Cópia dos seus dados</h2><p class="small muted">Os registros ficam neste navegador. Exporte uma cópia antes de limpar os dados, usar outro navegador ou trocar de aparelho. Não há sincronização automática. A cópia contém seus valores e não tem senha.</p><div class="actions">${btn('export','Exportar cópia')}${btn('import','Restaurar cópia')}</div></div>
- <p class="privacy">Três Bancos · versão web 1.4<br>Sem cadastro ou anúncios. O site precisa de internet para abrir; os registros são salvos localmente neste navegador. O aplicativo não envia seus lançamentos ao servidor. A consulta opcional de saldos depende da configuração privada e da autorização no Meu Pluggy. Não faz Pix, paga contas ou lê notificações no site.</p>`;
+ <div class="card"><h2>Cópia dos seus dados</h2><p class="small muted">Exporte uma cópia antes de limpar os dados ou trocar de aparelho. Confira no topo se a sincronização com sua conta está ativa. Alterações pendentes ficam neste navegador até serem enviadas. A cópia contém seus valores e não tem senha.</p><div class="actions">${btn('export','Exportar cópia')}${btn('import','Restaurar cópia')}</div></div>
+ <p class="privacy">Três Bancos · versão web 1.5<br>Sem cadastro ou anúncios. O site precisa de internet para abrir; os registros são salvos localmente neste navegador. Quando a sincronização está ativa, os registros são salvos na sua conta no servidor. A consulta opcional de saldos depende da configuração privada e da autorização no Meu Pluggy. Não faz Pix, paga contas ou lê notificações no site.</p>`;
 }
 function entry(kind='expense',prefill={}){
  const fromDraft=prefill.draft;draft=fromDraft||null;
@@ -106,9 +168,11 @@ function reconcile(){openModal('Ajustar saldo registrado',`<form id="reconcile-f
 function enableNotifications(){if(!native){toast('Instale o APK para usar esta função.');return;}mutate(s=>s.capture=true);Android.notificationSettings();}
 function dismiss(id){if(native){const error=Android.dismiss(id);if(error)throw Error(error);}queue=queue.filter(q=>q.id!==id);render();}
 document.addEventListener('click',e=>{
+ if(autoSaveForm&&(e.target.closest('[data-tab]')||e.target.closest('[data-action]'))&&!flushAutoSave()){e.preventDefault?.();e.stopImmediatePropagation?.();toast('Confira os campos para salvar antes de sair.');return;}
  const nav=e.target.closest('[data-tab]');if(nav){tab=nav.dataset.tab;render();window.scrollTo(0,0);return;}
  const el=e.target.closest('[data-action]');if(!el)return;const action=el.dataset.action;
  try{
+  if(action.startsWith('sync-')){void resolveCloud(action);return;}
   if(action==='close')closeModal();
   else if(['expense','income','transfer'].includes(action))entry(action);
   else if(action==='show-bills'){month=C.today().slice(0,7);tab='bills';render();window.scrollTo(0,0);}
@@ -140,15 +204,9 @@ document.addEventListener('submit',e=>{e.preventDefault();try{
   const next=JSON.parse(JSON.stringify(state));for(const a of next.accounts)a.opening=C.parseMoney($('open-'+a.id).value);
   next.startDate=$('start-date').value;if(!C.validDate(next.startDate)||next.startDate>C.today())throw Error('Escolha uma data até hoje.');next.setup=true;persist(next);render();window.scrollTo(0,0);toast('Controle iniciado com seus saldos.');
  }else if(e.target.id==='goals-form'){
-  const next=JSON.parse(JSON.stringify(state));
-  next.planning={configured:true,workdays:[...e.target.querySelectorAll('[name="workdays"]:checked')].map(x=>Number(x.value)),spendDays:[...e.target.querySelectorAll('[name="spendDays"]:checked')].map(x=>Number(x.value)),paymentMode:$('goal-mode').value,payday:Number($('goal-payday').value),buffer:C.parseMoney($('goal-buffer').value),protectReserve:$('goal-protect').checked};
-  if(!next.planning.workdays.length||!next.planning.spendDays.length)throw Error('Selecione pelo menos um dia de trabalho e um dia de gastos.');
-  next.weekly.daily=C.parseMoney($('goal-living').value);
-  for(const b of next.bills){b.amount=C.parseMoney($('goal-bill-'+b.id).value);b.start=b.end=Number($('goal-due-'+b.id).value);}
-  persist(next);closeModal();tab='goals';render();window.scrollTo(0,0);toast('Metas calculadas com o seu plano.');
+  saveGoals(e.target);autoSaveDone();closeModal();tab='goals';render();window.scrollTo(0,0);toast('Metas calculadas com o seu plano.');
  }else if(e.target.id==='settings-form'){
-  const next=JSON.parse(JSON.stringify(state));for(const a of next.accounts)a.role=$('role-'+a.id).value;if(new Set(next.accounts.map(a=>a.role)).size!==3)throw Error('Escolha uma função diferente para cada banco.');
-  for(const k of ['daily','fixed','saving','goal'])next.weekly[k]=C.parseMoney($('weekly-'+k).value);for(const b of next.bills){b.amount=C.parseMoney($('bill-'+b.id).value);b.start=b.end=Number($('due-'+b.id).value);}persist(next);render();toast('Ajustes salvos.');
+  saveSettings();autoSaveDone();render();toast('Ajustes salvos.');
  }else if(e.target.id==='entry-form'){
   const t={id:uid(),kind:$('kind').value,cents:C.parseMoney($('value').value),account:$('account').value,date:$('entry-date').value,note:$('note').value};
   if(t.kind==='transfer')t.to=$('to').value;
@@ -167,9 +225,11 @@ document.addEventListener('submit',e=>{e.preventDefault();try{
 window.restoreBackup=function(text){try{const restored=C.validate(JSON.parse(text));restored.capture=false;persist(restored);tab='home';render();toast(native?'Cópia restaurada. Reative a leitura dos avisos se desejar.':'Cópia restaurada neste navegador.');}catch(e){toast('Cópia não restaurada: '+e.message);}};
 function exportWebBackup(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='tres-bancos-'+C.today()+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Cópia preparada para download.');}
 $('backup-file').addEventListener('change',async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;try{if(file.size>10*1024*1024)throw Error('Arquivo maior que 10 MB.');const text=await file.text();const restored=C.validate(JSON.parse(text));if(!confirm('Restaurar esta cópia substituirá os registros deste navegador. Deseja continuar?'))return;restored.capture=false;persist(restored);tab='home';render();toast('Cópia restaurada neste navegador.');}catch(e){toast('Cópia não restaurada: '+e.message);}});
-window.addEventListener('storage',e=>{if(e.key!==WebStore.KEY)return;try{const saved=webStore.load();if(modal.open)closeModal();state=saved||C.initial();render();toast('Dados atualizados por outra aba.');}catch(e){toast(e.message);}});
+window.addEventListener('storage',e=>{if(e.key!==(cloudStore?.key||WebStore.KEY))return;if(autoSaveForm||modal.open||document.activeElement?.closest?.('form')){autoSaveMessage('Os dados mudaram em outra aba. Guarde os valores digitados antes de recarregar.');return;}try{const saved=webStore.load();if(modal.open)closeModal();state=saved||C.initial();render();toast('Dados atualizados por outra aba.');}catch(e){toast(e.message);}});
 let displayedDay=C.today();
 function refreshDate(){const day=C.today();if(day!==displayedDay&&!modal.open){displayedDay=day;month=day.slice(0,7);render();}}
-window.addEventListener('focus',()=>{window.refreshNative();refreshDate();});
+window.addEventListener('focus',()=>{window.refreshNative();refreshDate();if(cloudStore)void cloudStore.sync();});
+window.addEventListener('online',()=>{if(cloudStore)void cloudStore.sync();});
+setInterval(()=>{if(!document.hidden&&cloudStore)void cloudStore.sync();},10000);
 setInterval(()=>{if(!document.hidden&&!modal.open){window.refreshNative();refreshDate();}},5000);
 AuthUI.start(boot);

@@ -19,9 +19,9 @@ test('login throttles repeated failures and recovers after cooldown',async()=>{
  for(let i=0;i<5;i++)assert.equal((await auth.login(req(),username,'wrong')).status,401);
  assert.equal((await auth.login(req(),username,password)).status,429);time+=IDLE_MS;assert.equal((await auth.login(req(),username,password)).status,200);
 });
-async function fixture(t,provider){
+async function fixture(t,provider,stateStore){
  const reserve=net.createServer();await new Promise(r=>reserve.listen(0,'127.0.0.1',r));const port=reserve.address().port;await new Promise(r=>reserve.close(r));const origin=`http://127.0.0.1:${port}`;
- const server=createApp({provider,username,passwordHash,origin});await new Promise(r=>server.listen(port,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
+ const server=createApp({provider,stateStore,username,passwordHash,origin});await new Promise(r=>server.listen(port,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const post=(route,body={},headers={})=>fetch(origin+route,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',...headers},body:JSON.stringify(body)});
  return {origin,post};
 }
@@ -56,3 +56,24 @@ test('pending bank query cannot return data after logout',async t=>{
  await post('/api/auth/logout',{}, {Cookie:cookie,'X-CSRF-Token':session.csrf});release({accounts:[{secret:'private'}]});assert.equal((await pending).status,401);
 });
 test('non-HTTPS public origins fail closed',()=>{assert.throws(()=>createApp({username,passwordHash,origin:'http://public.example'}));});
+test('financial sync requires login and CSRF, persists the authenticated account and rejects stale versions',async t=>{
+ const {PGlite}=require('@electric-sql/pglite'),{StateStore}=require('../server/state-store.cjs'),Core=require('../core.js');
+ const database=new PGlite(),store=new StateStore(database);t.after(()=>database.close());
+ const {origin,post}=await fixture(t,null,store);
+ assert.equal((await fetch(origin+'/api/state')).status,401);
+ assert.equal((await post('/api/state',{revision:0,state:Core.initial()})).status,401);
+ const login=await post('/api/auth/login',{username,password}),cookie=login.headers.get('set-cookie').split(';')[0],session=await login.json();
+ const headers={Cookie:cookie},csrf={...headers,'X-CSRF-Token':session.csrf};
+ assert.deepEqual(await(await fetch(origin+'/api/state',{headers})).json(),{configured:true,revision:0,state:null});
+ const state=Core.initial();state.setup=true;state.bills[3].amount=13500;
+ assert.equal((await post('/api/state',{revision:0,state},headers)).status,403);
+ const saved=await post('/api/state',{revision:0,state,username:'another-user'},csrf);assert.equal(saved.status,200);
+ assert.deepEqual(await store.read('another-user'),{revision:0,state:null});
+ assert.deepEqual(await(await fetch(origin+'/api/state',{headers})).json(),{configured:true,revision:1,state});
+ assert.equal((await post('/api/state',{revision:0,state},csrf)).status,409);
+ assert.equal((await post('/api/state',{revision:1,state:{...state,startDate:'2999-01-01'}},csrf)).status,400);
+ assert.equal((await post('/api/state',{revision:1,state},{...csrf,Origin:'https://evil.example'})).status,403);
+ assert.equal((await post('/api/auth/login',{username,password:'x'.repeat(5000)})).status,413);
+ assert.equal((await fetch(origin+'/cloud-store.js')).status,401);
+ assert.equal((await fetch(origin+'/server/state-store.cjs')).status,404);
+});

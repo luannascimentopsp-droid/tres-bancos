@@ -2,16 +2,16 @@
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path');
 const {Pluggy}=require('./pluggy.cjs'),{Auth}=require('./auth.cjs');
 const ROOT=path.resolve(__dirname,'..');
-const ASSETS=new Set(['index.html','style.css','favicon.svg','app.js','core.js','planner.js','goals-ui.js','web-store.js','bank-config.js','bank-sync.js','bank-ui.js','auth-ui.js','login.html','login.js','login.css']);
+const ASSETS=new Set(['index.html','style.css','favicon.svg','app.js','core.js','planner.js','goals-ui.js','web-store.js','cloud-store.js','bank-config.js','bank-sync.js','bank-ui.js','auth-ui.js','login.html','login.js','login.css']);
 const PUBLIC=new Set(['favicon.svg','login.html','login.js','login.css']);
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
-async function readJSON(req){
+async function readJSON(req,limit=4096){
  if(!String(req.headers['content-type']||'').startsWith('application/json'))throw Object.assign(Error('Formato inválido.'),{status:415});
- if(Number(req.headers['content-length'])>4096)throw Object.assign(Error('Requisição muito grande.'),{status:413});
- let raw='',size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)throw Object.assign(Error('Requisição muito grande.'),{status:413});raw+=chunk;}
+ if(Number(req.headers['content-length'])>limit)throw Object.assign(Error('Requisição muito grande.'),{status:413});
+ let raw='',size=0;for await(const chunk of req){size+=chunk.length;if(size>limit)throw Object.assign(Error('Requisição muito grande.'),{status:413});raw+=chunk;}
  try{return JSON.parse(raw);}catch{throw Object.assign(Error('Requisição inválida.'),{status:400});}
 }
-function createApp({provider,username,passwordHash,origin,now=()=>Date.now()}){
+function createApp({provider,stateStore,username,passwordHash,origin,now=()=>Date.now()}){
  const publicUrl=new URL(origin);
  if(publicUrl.origin!==origin||!(publicUrl.protocol==='https:'||(publicUrl.protocol==='http:'&&['127.0.0.1','localhost'].includes(publicUrl.hostname))))throw Error('PUBLIC_ORIGIN deve ser HTTPS ou um endereço local.');
  const auth=new Auth({username,passwordHash,secure:publicUrl.protocol==='https:',now});
@@ -38,6 +38,20 @@ function createApp({provider,username,passwordHash,origin,now=()=>Date.now()}){
    }
    if(url.pathname.startsWith('/api/')){
     if(!session)return send(401,{error:'Entre novamente para acessar o Facilitador.'});
+    if(url.pathname==='/api/state'){
+     if(req.method==='GET'){
+      if(!stateStore)return send(200,{configured:false});
+      const saved=await stateStore.read(session.username);
+      if(!auth.session(req))return send(401,{error:'Entre novamente para acessar o Facilitador.'});
+      return send(200,{configured:true,...saved});
+     }
+     if(!auth.csrf(req,session))return send(403,{error:'Recarregue a página antes de sincronizar.'});
+     if(!stateStore)return send(503,{error:'A sincronização entre aparelhos ainda não foi configurada.'});
+     const body=await readJSON(req,10*1024*1024);
+     if(!auth.session(req))return send(401,{error:'Entre novamente para acessar o Facilitador.'});
+     const saved=await stateStore.write(session.username,body?.revision,body?.state);
+     return send(200,{configured:true,...saved});
+    }
     if(url.pathname==='/api/auth/logout'){
      if(req.method!=='POST')return send(405,{error:'Método não permitido.'});
      if(!auth.csrf(req,session))return send(403,{error:'Recarregue a página antes de sair.'});
@@ -74,6 +88,7 @@ if(require.main===module){
  const origin=configuredOrigin||`http://127.0.0.1:${port}`;
  let provider=null;
  if(process.env.PLUGGY_CLIENT_ID||process.env.PLUGGY_CLIENT_SECRET||process.env.PLUGGY_ITEM_IDS)provider=new Pluggy({clientId:process.env.PLUGGY_CLIENT_ID,clientSecret:process.env.PLUGGY_CLIENT_SECRET,itemIds:(process.env.PLUGGY_ITEM_IDS||'').split(',').map(x=>x.trim()).filter(Boolean)});
- createApp({provider,username:process.env.APP_USERNAME,passwordHash:process.env.APP_PASSWORD_HASH,origin}).listen(port,host,()=>console.log('Facilitador Financeiro: '+origin));
+ const stateStore=process.env.DATABASE_URL?require('./state-store.cjs').connect(process.env.DATABASE_URL):null;
+ createApp({provider,stateStore,username:process.env.APP_USERNAME,passwordHash:process.env.APP_PASSWORD_HASH,origin}).listen(port,host,()=>console.log('Facilitador Financeiro: '+origin));
 }
 module.exports={createApp};
