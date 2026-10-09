@@ -15,7 +15,7 @@ window.AuthUI=(()=>{
  }
  function activity(){if(!session||leaving)return;clearTimeout(timer);timer=setTimeout(logout,Math.max(0,Math.min(session.idleMs,session.expiresAt-Date.now())));if(Date.now()-lastCheck>60000)void verify();}
  async function start(boot){
-  if(!privateMode()){boot();return;}hide();if(!await verify())return;
+  if(typeof Android!=='undefined'){boot();return;}hide();if(!privateMode()){location.replace('https://facilitador-financeiro-nsex.onrender.com/');return;}if(!await verify())return;
   const button=document.createElement('button');button.type='button';button.className='btn subtle';button.textContent='Sair';button.id='auth-logout';button.addEventListener('click',logout);document.querySelector('header').append(button);
   document.getElementById('app').hidden=false;boot();activity();
   for(const event of ['pointerdown','keydown','scroll'])document.addEventListener(event,activity,{passive:true});

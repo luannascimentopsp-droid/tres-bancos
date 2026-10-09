@@ -28,7 +28,13 @@ async function fixture(t,provider){
 test('server protects API and panel files, authenticates, hides secrets and rejects CSRF',async t=>{
  let calls=0;const {origin,post}=await fixture(t,{snapshot:async()=>{calls++;return {accounts:[],issues:[]};}});
  assert.match(await (await fetch(origin+'/')).text(),/login-form/);
- for(const url of ['/api/bank/snapshot','/app.js','/bank-config.js','/core.js'])assert.equal((await fetch(origin+url)).status,401);
+ for(const url of ['/api/bank/snapshot','/api/bank/status','/api/auth/session','/app.js','/bank-config.js','/core.js','/planner.js','/web-store.js','/goals-ui.js','/bank-ui.js','/bank-sync.js','/auth-ui.js'])assert.equal((await fetch(origin+url)).status,401);
+ for(const url of ['/','/index.html','/login','/login.html']){
+  const response=await fetch(origin+url),html=await response.text();
+  assert.equal(response.status,200);assert.match(html,/login-form/);assert.doesNotMatch(html,/id="app"/);
+  assert.match(html,/https:\/\/wa\.me\/5583998083995\?text=/);
+  assert.match(html,/Solicitar acesso pelo WhatsApp/);
+ }
  for(const url of ['/.env','/server/config.example','/server/server.cjs','/.git/config'])assert.equal((await fetch(origin+url)).status,404);
  assert.equal((await post('/api/auth/login',{username,password},{Origin:'https://evil.example'})).status,403);
  assert.equal((await post('/api/auth/login',{username,password:'wrong'})).status,401);

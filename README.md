@@ -2,6 +2,10 @@
 
 Controle financeiro pessoal para organizar C6 Bank, Nubank e Mercado Pago em três funções: dia a dia, contas fixas e reserva.
 
+## Acesso autorizado
+
+Use https://facilitador-financeiro-nsex.onrender.com/. O servidor exige usuário e senha para abrir o painel e consultar as APIs. Quem ainda não tem acesso pode solicitar aprovação pelo botão de WhatsApp na tela de entrada, no número +55 (83) 99808-3995. A solicitação não cria conta nem concede acesso automaticamente. A configuração atual usa um único usuário autorizado; não existe cadastro público. A versão estática encaminha para o serviço com login.
+
 ## Usar
 
 1. Informe seus saldos iniciais e a data de referência.
@@ -11,6 +15,10 @@ Controle financeiro pessoal para organizar C6 Bank, Nubank e Mercado Pago em tr�
 5. Em **Metas**, informe seus dias de trabalho, quando recebe, orçamento semanal e a sobra que deseja ter no fim do mês. O padrão é trabalhar de segunda a sábado e receber no sábado.
 
 A versão pública começa sem saldos, lançamentos ou valores pessoais. Os cinco tipos de conta são modelos editáveis em valor e vencimento.
+
+O resumo inicial e os totais do histórico usam o mês atual. A escolha de outro mês em **Contas** vale apenas para consultar e registrar pagamentos daquele mês; o atalho **Conferir contas** no resumo abre o mês atual.
+
+Cópias com data de saldo inicial ou movimentos posteriores a hoje são recusadas antes de substituir os registros. Um pagamento realizado até hoje pode continuar vinculado a uma conta de um mês futuro.
 
 ## Metas para fechar o mês
 
@@ -45,7 +53,7 @@ Site estático, sem etapa de compilação ou dependências de produção. Sirva 
 node --test tests/*.test.cjs
 ```
 
-No GitHub Pages, publique a raiz (`/`) da branch `main`. O arquivo `.nojekyll` mantém a publicação estática.
+O endereço antigo do GitHub Pages encaminha para o serviço privado; somente o servidor Node executa a autenticação.
 
 ## Login privado
 

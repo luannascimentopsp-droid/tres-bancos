@@ -40,6 +40,8 @@
     return {fixed,daily,save,margin,shortfall,bootstrap};
   }
   function validate(s){
+    const latestDate=today();
+    if(s&&validDate(s.startDate)&&s.startDate>latestDate)throw Error('A data do saldo inicial não pode ser posterior a hoje.');
     if(!s||s.version!==1||typeof s.setup!=='boolean'||typeof s.capture!=='boolean'||!validDate(s.startDate)||!Array.isArray(s.accounts)||s.accounts.length!==3||!Array.isArray(s.transactions)||s.transactions.length>20000||!Array.isArray(s.bills)||s.bills.length!==5)throw Error('Cópia inválida ou incompatível.');
     if(new Set(s.accounts.map(a=>a.id)).size!==3||new Set(s.accounts.map(a=>a.role)).size!==3)throw Error('Bancos inválidos na cópia.');
     for(const a of s.accounts)if(!BANKS.includes(a.id)||!['daily','bills','save'].includes(a.role)||typeof a.name!=='string'||a.name.length>30||!Number.isSafeInteger(a.opening)||a.opening<0||a.opening>10000000000)throw Error('Saldo inicial inválido.');
@@ -51,6 +53,7 @@
       if(!s.bankSync||typeof s.bankSync!=='object'||Array.isArray(s.bankSync))throw Error('Conferência bancária inválida.');
       for(const [id,v] of Object.entries(s.bankSync))if(!BANKS.includes(id)||!v||typeof v.sourceId!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(v.sourceId)||typeof v.version!=='string'||!/^[a-f0-9]{64}$/.test(v.version)||![v.updatedAt,v.appliedAt].every(d=>typeof d==='string'&&/^\d{4}-\d\d-\d\dT/.test(d)&&Number.isFinite(Date.parse(d))))throw Error('Conferência bancária inválida.');
     }
+    if(s.transactions.some(t=>t.date>latestDate))throw Error('A cópia contém lançamentos posteriores a hoje. Registre apenas movimentos já realizados.');
     for(const n of Object.values(balances(s)))if(!Number.isSafeInteger(n))throw Error('Saldo fora do limite.');
     return s;
   }
