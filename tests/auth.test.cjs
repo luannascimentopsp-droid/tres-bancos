@@ -56,6 +56,22 @@ test('pending bank query cannot return data after logout',async t=>{
  await post('/api/auth/logout',{}, {Cookie:cookie,'X-CSRF-Token':session.csrf});release({accounts:[{secret:'private'}]});assert.equal((await pending).status,401);
 });
 test('non-HTTPS public origins fail closed',()=>{assert.throws(()=>createApp({username,passwordHash,origin:'http://public.example'}));});
+test('public demo serves only static examples and does not unlock private APIs or access signed-in records',async t=>{
+ let reads=0,writes=0,bankCalls=0;
+ const {origin,post}=await fixture(t,{snapshot:async()=>{bankCalls++;}},{read:async()=>{reads++;return {revision:0,state:null};},write:async()=>{writes++;}});
+ assert.match(await(await fetch(origin+'/login')).text(),/href="\/demo\/"/);
+ const redirect=await fetch(origin+'/demo',{redirect:'manual'});assert.equal(redirect.status,302);assert.equal(redirect.headers.get('location'),'/demo/');
+ const page=await fetch(origin+'/demo/'),html=await page.text();assert.equal(page.status,200);assert.equal(page.headers.get('set-cookie'),null);assert.match(page.headers.get('content-security-policy'),/connect-src 'none'/);
+ assert.match(html,/Todos os valores são fictícios/);assert.doesNotMatch(html,/src="(?:auth-ui|bank-ui|cloud-store|web-store)/);
+ for(const asset of [...html.matchAll(/(?:src|href)="([^"?]+)(?:\?[^" ]*)?"/g)].map(m=>m[1]).filter(x=>!x.startsWith('/')&&!x.startsWith('https:'))){assert.equal((await fetch(origin+'/demo/'+asset)).status,200,asset);}
+ for(const route of ['/api/state','/api/bank/snapshot','/api/auth/session','/app.js','/cloud-store.js'])assert.equal((await fetch(origin+route)).status,401,route);
+ for(const route of ['/demo/api/state','/demo/auth-ui.js','/demo/cloud-store.js','/demo/web-store.js','/demo/bank-config.js','/demo/server/server.cjs'])assert.equal((await fetch(origin+route)).status,404,route);
+ assert.equal((await post('/api/state',{revision:0,state:{}})).status,401);
+ const login=await post('/api/auth/login',{username,password}),cookie=login.headers.get('set-cookie').split(';')[0];
+ assert.match(await(await fetch(origin+'/demo/',{headers:{Cookie:cookie}})).text(),/Todos os valores são fictícios/);
+ assert.equal(reads,0);assert.equal(writes,0);assert.equal(bankCalls,0);
+ assert.equal((await fetch(origin+'/api/auth/session',{headers:{Cookie:cookie}})).status,200);
+});
 test('financial sync requires login and CSRF, persists the authenticated account and rejects stale versions',async t=>{
  const {PGlite}=require('@electric-sql/pglite'),{StateStore}=require('../server/state-store.cjs'),Core=require('../core.js');
  const database=new PGlite(),store=new StateStore(database);t.after(()=>database.close());

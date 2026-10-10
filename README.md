@@ -66,3 +66,9 @@ O endereço antigo do GitHub Pages encaminha para o serviço privado; somente o 
 ## Login privado
 
 A versão 1.4 substitui a chave digitada no navegador por usuário, senha e sessão HttpOnly validada no servidor. O GitHub Pages não executa autenticação no servidor. Para habilitar, siga o guia INTEGRACAO-BANCARIA.md e crie a configuração privada com server/create-login.cjs. Não há senha padrão, chaves reais ou dados financeiros no repositório.
+
+## Demonstração pública
+
+A tela de login oferece **Experimentar demonstração**, em `/demo/`. Ela usa as mesmas telas do controle, com exemplos fictícios e armazenamento somente em memória. Recarregar ou usar **Recomeçar demonstração** restaura os exemplos. Nenhum dado real do navegador é lido ou alterado, não há sincronização, consulta bancária ou importação de cópias nessa experiência. O visitante pode solicitar acesso pelo WhatsApp.
+
+O servidor permite somente uma lista explícita de arquivos estáticos sob `/demo/`. As APIs continuam exigindo sessão e proteção CSRF. A página de demonstração bloqueia conexões de rede via CSP.

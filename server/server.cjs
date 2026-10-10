@@ -4,6 +4,8 @@ const {Pluggy}=require('./pluggy.cjs'),{Auth}=require('./auth.cjs');
 const ROOT=path.resolve(__dirname,'..');
 const ASSETS=new Set(['index.html','style.css','favicon.svg','app.js','core.js','planner.js','goals-ui.js','web-store.js','cloud-store.js','bank-config.js','bank-sync.js','bank-ui.js','auth-ui.js','login.html','login.js','login.css']);
 const PUBLIC=new Set(['favicon.svg','login.html','login.js','login.css']);
+// Only these static files are public in the demo. API routes keep their normal authentication.
+const DEMO=new Set(['demo.html','demo.js','demo.css','style.css','favicon.svg','core.js','planner.js','goals-ui.js','app.js']);
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
 async function readJSON(req,limit=4096){
  if(!String(req.headers['content-type']||'').startsWith('application/json'))throw Object.assign(Error('Formato inválido.'),{status:415});
@@ -72,6 +74,14 @@ function createApp({provider,stateStore,username,passwordHash,origin,now=()=>Dat
     return send(200,data);
    }
    if(req.method!=='GET')return send(405,{error:'Método não permitido.'});
+   if(url.pathname==='/demo'){res.writeHead(302,{Location:'/demo/'});return res.end();}
+   if(url.pathname.startsWith('/demo/')){
+    const file=url.pathname==='/demo/'?'demo.html':url.pathname.slice('/demo/'.length);
+    if(!DEMO.has(file))return send(404,{error:'Recurso não encontrado.'});
+    // No network requests from the demonstration, even for visitors already logged in.
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+    return send(200,await fs.readFile(path.join(ROOT,file)),MIME[path.extname(file)]);
+   }
    let name=url.pathname==='/'?'index.html':url.pathname==='/login'?'login.html':url.pathname.slice(1);
    if(!ASSETS.has(name))return send(404,{error:'Recurso não encontrado.'});
    if(!session&&!PUBLIC.has(name)){if(name==='index.html')name='login.html';else return send(401,{error:'Entre para acessar o Facilitador.'});}
