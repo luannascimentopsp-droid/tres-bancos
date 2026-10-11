@@ -1,74 +1,84 @@
-# Facilitador Financeiro 
+# Facilitador Financeiro
 
-Controle financeiro pessoal para organizar C6 Bank, Nubank e Mercado Pago em três funções: dia a dia, contas fixas e reserva.
+**Uma visão do dinheiro do dia a dia, das contas fixas e da reserva.**
 
-## Acesso autorizado
+Aplicação web de controle financeiro pessoal com receitas, despesas, transferências e planejamento mensal. A proposta organiza três contas em funções distintas e ajuda a visualizar quanto ainda falta para fechar o mês.
 
-Use https://facilitador-financeiro-nsex.onrender.com/. O servidor exige usuário e senha para abrir o painel e consultar as APIs. Quem ainda não tem acesso pode solicitar aprovação pelo botão de WhatsApp na tela de entrada, no número +55 (83) 99808-3995. A solicitação não cria conta nem concede acesso automaticamente. A configuração atual usa um único usuário autorizado; não existe cadastro público. A versão estática encaminha para o serviço com login.
+[**Experimentar demonstração**](https://facilitador-financeiro-nsex.onrender.com/demo/) · [Acesso privado](https://facilitador-financeiro-nsex.onrender.com/) · [Guia de uso](docs/OPERACAO.md)
 
-## Usar
+> A demonstração é pública, dispensa cadastro e usa somente valores fictícios. As alterações são descartadas ao recarregar.
 
-1. Informe seus saldos iniciais e a data de referência.
-2. Em **Ajustes**, configure valores, vencimentos das contas e metas semanais.
-3. Registre entradas, despesas e transferências depois de realizá-las no banco.
-4. Use **Exportar cópia** regularmente. **Restaurar cópia** substitui os registros após confirmação.
-5. Em **Metas**, informe seus dias de trabalho, quando recebe, orçamento semanal e a sobra que deseja ter no fim do mês. O padrão é trabalhar de segunda a sábado e receber no sábado.
+![Demonstração do Facilitador Financeiro com dados fictícios](docs/images/demonstracao.png)
 
-A versão pública começa sem saldos, lançamentos ou valores pessoais. Os cinco tipos de conta são modelos editáveis em valor e vencimento.
+## O problema
 
-O resumo inicial e os totais do histórico usam o mês atual. A escolha de outro mês em **Contas** vale apenas para consultar e registrar pagamentos daquele mês; o atalho **Conferir contas** no resumo abre o mês atual.
+Somar saldos não mostra, por si só, o dinheiro disponível: parte pode estar reservada para contas e objetivos. O sistema separa essas finalidades e calcula metas considerando vencimentos, orçamento e recebimentos previstos pelo usuário.
 
-Cópias com data de saldo inicial ou movimentos posteriores a hoje são recusadas antes de substituir os registros. Um pagamento realizado até hoje pode continuar vinculado a uma conta de um mês futuro.
+## Funcionalidades
 
-## Metas para fechar o mês
+- Registro de entradas, despesas e transferências entre contas.
+- Contas fixas por mês, vencimentos e acompanhamento de pagamentos.
+- Metas para fechar o mês e acompanhamento da reserva.
+- Exportação e restauração de cópias com validação antes de substituir dados.
+- Login privado, sessão no servidor e proteção de operações por CSRF.
+- Sincronização opcional com PostgreSQL e tratamento de alterações concorrentes.
+- Integração opcional para consulta e conferência de saldos bancários.
 
-A meta restante é o maior valor entre zero e **contas do mês ainda não pagas + gastos do dia a dia previstos até o fim do mês + sobra desejada − saldo disponível**. Por padrão, o saldo da reserva fica protegido, fora do dinheiro disponível. É possível incluí-lo explicitamente nas opções.
+## Tecnologias e arquitetura
 
-O orçamento semanal de gastos é distribuído em centavos pelos dias de gastos escolhidos. A parcela de hoje desconta os gastos comuns já lançados hoje. Contas pagas não são cobradas novamente, e transferências não são somadas como receita nem como nova despesa. A meta de guardar por semana e o valor de separar para contas não são cobrados uma segunda vez: a sobra desejada representa o dinheiro adicional que o usuário quer manter.
+| Camada | Implementação |
+| --- | --- |
+| Interface | HTML, CSS e JavaScript |
+| Servidor | Node.js, módulo HTTP nativo |
+| Persistência | Armazenamento no navegador e PostgreSQL opcional |
+| Autenticação | Senha derivada com scrypt e sessão HttpOnly |
+| Testes | Node Test Runner e PostgreSQL em WASM com PGlite |
+| Hospedagem | Render |
 
-As entradas necessárias são distribuídas pelos recebimentos restantes do mês. Quando uma conta vence antes de um recebimento posterior, parte da meta é antecipada para um recebimento anterior. Valores necessários antes do primeiro recebimento são destacados como **entrada fora do calendário**, separadamente das metas semanais. Datas não garantem que a entrada ocorra antes da saída no mesmo dia.
+Os cálculos monetários usam centavos. Transferências não entram novamente como receita ou despesa, e a reserva fica fora do saldo disponível por padrão.
 
-A meta diária é uma média equivalente pelos dias de trabalho restantes cujo pagamento pode acontecer neste mês. Para quem recebe semanalmente, ela orienta o trabalho e não representa recebimentos diários garantidos. O sistema não registra produção ainda não paga. Os valores que já entraram no dia, na semana e no mês vêm somente dos lançamentos de entrada.
+As APIs privadas exigem sessão no servidor. Na sincronização, o controle de versão detecta conflitos; o usuário escolhe como resolvê-los. A demonstração usa armazenamento em memória e arquivos explicitamente permitidos, sem acessar dados reais ou APIs bancárias.
 
-A previsão é do mês atual e depende das contas, saldos e gastos informados. Não inventa renda futura ou pendências de meses anteriores. Ao mudar o mês ou registrar movimentos, o plano é recalculado. Cópias antigas continuam funcionando; basta configurar as metas sem apagar os lançamentos.
+## Executar e testar
 
-## Conexão bancária opcional
-
-Em Ajustes → Conexão bancária estão as instruções para o Meu Pluggy. A consulta e a conferência de saldos estão implementadas em um servidor privado opcional, mas exigem cadastro, autorização e credenciais. O site no GitHub Pages continua sem conexão direta aos bancos. Veja [INTEGRACAO-BANCARIA.md](INTEGRACAO-BANCARIA.md) para ativação, limitações e validação pendente com contas reais. Não há importação automática do extrato nesta etapa.
-
-## Salvamento automático e sincronização
-
-Ajustes e metas válidos são salvos automaticamente após a edição, sem fechar o formulário. Campos incompletos ou inválidos não substituem os dados anteriores. Novas entradas, despesas, transferências, restaurações e conferências de saldo continuam dependendo de confirmação no formulário, e passam pela mesma persistência após salvar.
-
-A sincronização web entre aparelhos usa o mesmo login e um banco PostgreSQL, configurado por `DATABASE_URL` exclusivamente no servidor. Sem essa variável, o site continua salvando neste navegador e informa que a sincronização não está configurada. Consulte [SINCRONIZACAO.md](SINCRONIZACAO.md) para ativar.
-
-Cada alteração fica primeiro no navegador e depois é enviada com controle de versão. Quedas de conexão deixam os dados pendentes para nova tentativa. Alterações concorrentes não são mescladas automaticamente: o usuário escolhe qual versão manter e ambas são preservadas em uma cópia local antes da resolução. O topo da página informa o estado de sincronização. A consulta ocorre ao abrir, voltar à janela e a cada dez segundos enquanto visível; formulários em edição não são substituídos.
-
-## Dados e limites
-
-- Os dados são salvos em `localStorage` neste navegador e endereço. Limpar os dados do site ou usar navegação privada pode apagá-los.
-- Na versão pública estática, não há servidor financeiro ou consulta bancária. A conexão opcional usa o servidor privado descrito no guia. Com o PostgreSQL configurado, os registros sincronizam entre navegadores com o mesmo login. O APK continua separado.
-- O site precisa de internet para abrir e não lê notificações do Android. A leitura de notificações pertence ao APK.
-- Cópias JSON da versão 1 do APK são compatíveis. Importar uma cópia é uma substituição, não uma mesclagem.
-- Os saldos são os registrados por você, incluindo conferências bancárias aplicadas explicitamente na versão privada. Consultar novamente uma mesma atualização não reaplica ajustes. O site não realiza pagamentos ou transferências.
-- As cópias contêm informações financeiras sem criptografia; guarde-as em local privado. Não as envie ao repositório.
-
-## Desenvolvimento
-
-Servidor Node.js 22 com PostgreSQL opcional. Instale as dependências com `npm ci --include=dev --ignore-scripts`. Para testes de persistência, a suíte usa PostgreSQL embarcado (PGlite), sem conta externa. Verifique com:
+Requisito: **Node.js 22 ou superior**.
 
 ```sh
-node --test tests/*.test.cjs
+git clone https://github.com/luannascimentopsp-droid/tres-bancos.git
+cd tres-bancos
+npm ci --include=dev --ignore-scripts
+npm test
 ```
 
-O endereço antigo do GitHub Pages encaminha para o serviço privado; somente o servidor Node executa a autenticação.
+Para iniciar o servidor, configure o login e a origem conforme [INTEGRACAO-BANCARIA.md](INTEGRACAO-BANCARIA.md) e execute `npm start`. A consulta bancária é opcional; não é necessária para testar os cálculos. Para sincronização, consulte [SINCRONIZACAO.md](SINCRONIZACAO.md).
 
-## Login privado
+Não existe senha padrão. Credenciais e conexão do banco são configuradas no servidor.
 
-A versão 1.4 substitui a chave digitada no navegador por usuário, senha e sessão HttpOnly validada no servidor. O GitHub Pages não executa autenticação no servidor. Para habilitar, siga o guia INTEGRACAO-BANCARIA.md e crie a configuração privada com server/create-login.cjs. Não há senha padrão, chaves reais ou dados financeiros no repositório.
+## O que os testes verificam
 
-## Demonstração pública
+- Cálculos financeiros, orçamento e planejamento mensal.
+- Restauração de cópias e rejeição de dados inválidos.
+- Autenticação, sessão e proteção das APIs.
+- Persistência, sincronização e controle de versão.
+- Isolamento da demonstração e integração bancária com cenários de teste.
 
-A tela de login oferece **Experimentar demonstração**, em `/demo/`. Ela usa as mesmas telas do controle, com exemplos fictícios e armazenamento somente em memória. Recarregar ou usar **Recomeçar demonstração** restaura os exemplos. Nenhum dado real do navegador é lido ou alterado, não há sincronização, consulta bancária ou importação de cópias nessa experiência. O visitante pode solicitar acesso pelo WhatsApp.
+## Estrutura
 
-O servidor permite somente uma lista explícita de arquivos estáticos sob `/demo/`. As APIs continuam exigindo sessão e proteção CSRF. A página de demonstração bloqueia conexões de rede via CSP.
+```text
+core.js, planner.js   Cálculos e regras do planejamento
+app.js, *-ui.js       Telas e interação
+web-store.js         Persistência no navegador
+cloud-store.js       Sincronização
+server/              HTTP, autenticação, banco e integração
+tests/               Testes automatizados
+```
+
+## Limites atuais
+
+O serviço privado usa um único usuário autorizado, sem cadastro público. A sincronização depende da configuração de PostgreSQL. A integração bancária consulta saldos; não importa extratos automaticamente e não realiza pagamentos ou transferências. Seu uso real depende de credenciais e autorização do provedor.
+
+O [guia de uso e operação](docs/OPERACAO.md) detalha regras de cálculo, cópias de segurança e limitações. Os valores de exemplo da demonstração não representam dados pessoais.
+
+---
+
+Projeto do portfólio de [Luan Nascimento](https://github.com/luannascimentopsp-droid).
