@@ -1,4 +1,4 @@
-# Facilitador Financeiro
+# Facilitador de Vida
 
 **Uma visão do dinheiro do dia a dia, das contas fixas e da reserva.**
 
@@ -82,3 +82,8 @@ O [guia de uso e operação](docs/OPERACAO.md) detalha regras de cálculo, cópi
 ---
 
 Projeto do portfólio de [Luan Nascimento](https://github.com/luannascimentopsp-droid).
+
+
+## Agenda e lembretes
+
+A aba Agenda guarda compromissos com anotação, data, horário, antecedência de aviso e repetição anual opcional. Os itens fazem parte do estado da conta, das cópias e da sincronização online. O aviso interno aparece quando o Facilitador está aberto. Cada navegador pode ativar notificações por meio do botão explícito na agenda; notificações fora da página e funcionamento com o app fechado não fazem parte desta versão.

@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
-const Core=require('../core.js'),Planner=require('../planner.js'),WebStore=require('../web-store.js');
+const Core=require('../core.js'),Planner=require('../planner.js'),Agenda=require('../agenda.js'),WebStore=require('../web-store.js');
 
 function fixture(){
  const state=Core.initial();state.setup=true;state.accounts[0].opening=100000;
@@ -10,7 +10,7 @@ function ui(saved,{native=false}={}){
  const elements=new Map(),listeners=new Map(),data=new Map([[WebStore.KEY,JSON.stringify(saved)]]);
  const element=id=>{if(!elements.has(id))elements.set(id,{innerHTML:'',style:{},addEventListener(event,fn){listeners.set(id+':'+event,fn);},classList:{toggle(){}},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(id);};
  const window={localStorage:{getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)},addEventListener(){},scrollTo(){}};
- const context={Core,Planner,WebStore,window,document:{getElementById:element,addEventListener(event,fn){const previous=listeners.get(event);listeners.set(event,e=>{previous?.(e);fn(e);});},querySelectorAll(){return[];}},AuthUI:{start(){}},setTimeout(){},clearTimeout(){},setInterval(){},confirm:()=>true};
+ const context={Core,Planner,Agenda,WebStore,window,document:{hidden:false,getElementById:element,addEventListener(event,fn){const previous=listeners.get(event);listeners.set(event,e=>{previous?.(e);fn(e);});},querySelectorAll(){return[];}},AuthUI:{start(){}},setTimeout(){},clearTimeout(){},setInterval(){},confirm:()=>true};
  if(native)context.Android={load:()=>JSON.stringify({state:saved,queue:[]}),save:value=>{data.set(WebStore.KEY,value);return '';} };
  vm.createContext(context);
  for(const file of ['app.js','goals-ui.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'..',file),'utf8'),context);
@@ -89,4 +89,11 @@ test('a transaction draft never creates a movement through autosave',()=>{
  const state=fixture(),app=ui(state),before=app.data.get(WebStore.KEY);
  app.listeners.get('input')({type:'input',target:{id:'value',closest:()=>({id:'entry-form'})}});
  assert.equal(app.run('autoSaveForm'),null);assert.equal(app.data.get(WebStore.KEY),before);
+});
+test('agenda saves and completes events without changing financial records',()=>{
+ const state=fixture(),app=ui(state),financial={accounts:state.accounts,transactions:state.transactions,bills:state.bills,weekly:state.weekly};
+ app.run("tab='agenda';renderAgenda()");app.element('agenda-title').value='<Reunião>';app.element('agenda-notes').value='Sala 2';app.element('agenda-at').value='2026-10-12T16:30';app.element('agenda-advance').value='15';app.element('agenda-repeat').value='once';
+ app.run('saveAgendaForm({dataset:{edit:""}})');const saved=JSON.parse(app.data.get(WebStore.KEY));assert.equal(saved.agenda.length,1);assert.equal(saved.agenda[0].title,'<Reunião>');assert.deepEqual({accounts:saved.accounts,transactions:saved.transactions,bills:saved.bills,weekly:saved.weekly},financial);
+ app.run('tab="agenda";renderAgenda()');assert.match(app.element('app').innerHTML,/&lt;Reunião&gt;/);assert.doesNotMatch(app.element('app').innerHTML,/<Reunião>/);
+ app.run(`finishAgenda(${JSON.stringify(saved.agenda[0].id)},"2026-10-12")`);assert.deepEqual(JSON.parse(app.data.get(WebStore.KEY)).agenda[0].completed,['2026-10-12']);
 });

@@ -28,7 +28,7 @@ async function fixture(t,provider,stateStore){
 test('server protects API and panel files, authenticates, hides secrets and rejects CSRF',async t=>{
  let calls=0;const {origin,post}=await fixture(t,{snapshot:async()=>{calls++;return {accounts:[],issues:[]};}});
  assert.match(await (await fetch(origin+'/')).text(),/login-form/);
- for(const url of ['/api/bank/snapshot','/api/bank/status','/api/auth/session','/app.js','/bank-config.js','/core.js','/planner.js','/web-store.js','/goals-ui.js','/bank-ui.js','/bank-sync.js','/auth-ui.js'])assert.equal((await fetch(origin+url)).status,401);
+ for(const url of ['/api/bank/snapshot','/api/bank/status','/api/auth/session','/app.js','/agenda.js','/bank-config.js','/core.js','/planner.js','/web-store.js','/goals-ui.js','/bank-ui.js','/bank-sync.js','/auth-ui.js'])assert.equal((await fetch(origin+url)).status,401);
  for(const url of ['/','/index.html','/login','/login.html']){
   const response=await fetch(origin+url),html=await response.text();
   assert.equal(response.status,200);assert.match(html,/login-form/);assert.doesNotMatch(html,/id="app"/);

@@ -1,12 +1,12 @@
 'use strict';
-const C=Core, $=id=>document.getElementById(id), native=typeof Android!=='undefined', demo=window.DemoMode===true;
+const C=Core, A=Agenda, $=id=>document.getElementById(id), native=typeof Android!=='undefined', demo=window.DemoMode===true;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const inputMoney=n=>(n/100).toFixed(2).replace('.',',');
 const uid=()=>Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
 const roles={daily:'Dia a dia',bills:'Contas fixas',save:'Reserva'};
 const bankMark={c6:'C6',nu:'nu',mp:'MP'};
 const kindLabel={expense:'Despesa',income:'Entrada',transfer:'Transferência',adjust:'Ajuste de saldo'};
-let state=C.initial(),queue=[],access=false,tab='home',month=C.today().slice(0,7),draft=null,toastTimer;
+let state=C.initial(),queue=[],access=false,tab='home',month=C.today().slice(0,7),draft=null,toastTimer,agendaNotified=new Set();
 const app=$('app'),modal=$('modal');
 let webStore=native?null:new WebStore(()=>window.localStorage,C.validate);
 function toast(msg){$('toast').textContent=msg;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4200);}
@@ -83,7 +83,7 @@ function moneyField(id,label,value='',required=true){return `<label for="${id}">
 function errorForm(e){const target=modal.open?modal.querySelector('#form-error'):$('form-error');if(target)target.textContent=e.message||String(e);else toast(e.message||String(e));}
 function openModal(title,html){$('modal-title').textContent=title;$('modal-body').innerHTML=html;modal.showModal();}
 function closeModal(){if(!flushAutoSave())return;modal.close();draft=null;render();}
-function boot(){try{if(native){const data=JSON.parse(Android.load());if(data.error)throw Error(data.error);if(data.state)state=C.validate(data.state);queue=data.queue||[];access=data.notificationsEnabled;}else{const saved=webStore.load();if(saved)state=saved;}}catch(e){app.innerHTML=`<div class="warning">${esc(e.message)} Os dados existentes foram preservados. Reabra a página ou verifique se o navegador permite armazenamento local.</div>`;return;}render();setCloudStatus('local');if(!native&&AuthUI.username&&typeof CloudStore!=='undefined')void startCloud(state.setup?state:null);}
+function boot(){try{if(native){const data=JSON.parse(Android.load());if(data.error)throw Error(data.error);if(data.state)state=C.validate(data.state);queue=data.queue||[];access=data.notificationsEnabled;}else{const saved=webStore.load();if(saved)state=C.validate(saved);}}catch(e){app.innerHTML=`<div class="warning">${esc(e.message)} Os dados existentes foram preservados. Reabra a página ou verifique se o navegador permite armazenamento local.</div>`;return;}render();setCloudStatus('local');checkAgendaReminders();if(!native&&AuthUI.username&&typeof CloudStore!=='undefined')void startCloud(state.setup?state:null);}
 window.refreshNative=function(){if(!native)return;try{const data=JSON.parse(Android.load());if(data.error){toast(data.error);return;}const changed=JSON.stringify(queue)!==JSON.stringify(data.queue)||access!==data.notificationsEnabled;queue=data.queue||[];access=data.notificationsEnabled;if(changed&&!modal.open)render();}catch(e){toast('Não foi possível atualizar os avisos.');}};
 window.goHome=function(){if(modal.open)closeModal();else{tab='home';render();window.scrollTo(0,0);}};
 window.handleBack=function(){if(modal.open){closeModal();return true;}if(tab!=='home'){window.goHome();return true;}return false;};
@@ -94,7 +94,7 @@ function render(){
   const pending=queue.filter(q=>!state.transactions.some(t=>t.sourceId===q.id&&!t.void));
   $('badge').textContent=pending.length||'';
   if(!state.setup){renderSetup();return;}
-  if(tab==='home')renderHome();else if(tab==='bills')renderBills();else if(tab==='goals')renderGoals();else if(tab==='queue')renderQueue();else if(tab==='banks')renderBanks();else renderSettings();
+  if(tab==='home')renderHome();else if(tab==='bills')renderBills();else if(tab==='goals')renderGoals();else if(tab==='agenda')renderAgenda();else if(tab==='queue')renderQueue();else if(tab==='banks')renderBanks();else renderSettings();
 }
 function renderSetup(){
  app.innerHTML=`<div class="setup-step">PRIMEIRO PASSO</div><h1>Um banco para cada destino.</h1><p class="muted">Confirme o saldo atual de cada conta. Você pode trocar as funções depois.</p>
@@ -127,6 +127,35 @@ function renderBills(){
  const total=state.bills.reduce((n,b)=>n+Math.max(0,b.amount-C.paid(state,b.id,month)),0);
  app.innerHTML=`<div class="eyebrow">Compromissos primeiro</div><div class="heading"><h1>Contas do mês</h1><div class="month"><label class="small" for="month">Mês</label><input id="month" type="month" value="${month}"></div></div><div class="hero"><div class="eyebrow">Falta pagar</div><div class="amount">${C.money(total)}</div><p class="small">Configure valores e vencimentos em Ajustes. Registre os pagamentos para acompanhar o que falta.</p></div>
  <section class="section">${state.bills.map(b=>{let paid=C.paid(state,b.id,month),left=Math.max(0,b.amount-paid),late=C.today()>`${month}-${String(b.end).padStart(2,'0')}`;return `<div class="card"><div class="row"><h3>${esc(b.name)}</h3><span class="pill ${left?(late?'warn':'neutral'):''}">${left?(late?'Confira o pagamento':'Em aberto'):'Pago'}</span></div><p class="muted small">${b.start===b.end?'Até dia '+b.end:'De '+b.start+' a '+b.end} · previsto ${C.money(b.amount)}</p><div class="row"><strong>${C.money(left)}</strong>${left?btn('pay-bill','Registrar pagamento','',`data-id="${b.id}"`):'<span class="good small">Pagamento registrado</span>'}</div>${paid?`<p class="small muted">Já registrado: ${C.money(paid)}</p>`:''}</div>`;}).join('')}</section><p class="note">“Registrar pagamento” apenas atualiza seu controle. Faça o pagamento no aplicativo do banco.</p>`;
+}
+function agendaCard(item,at){
+ const date=at.slice(0,10),time=at.slice(11,16),completed=item.completed.includes(date);
+ return `<article class="card agenda-item ${completed?'agenda-done':''}"><div class="row"><h3>${esc(item.title)}</h3><span class="pill ${date<C.today()&&!completed?'warn':'neutral'}">${completed?'Concluído':date<C.today()?'Passou':item.repeat==='yearly'?'Anual':'Agendado'}</span></div><p class="small muted">${new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'numeric',month:'long',year:'numeric'})} · ${time} · Aviso: ${A.advanceLabel(item.advance)}${item.repeat==='yearly'?' · repete todo ano':''}</p>${item.notes?`<p>${esc(item.notes)}</p>`:''}<div class="actions">${!completed&&date>=C.today()?btn('agenda-done','Concluir','subtle',`data-id="${esc(item.id)}" data-date="${date}"`):''}${btn('agenda-edit','Editar','subtle',`data-id="${esc(item.id)}"`)}${btn('agenda-delete','Excluir','subtle',`data-id="${esc(item.id)}"`)}</div></article>`;
+}
+function renderAgenda(){
+ const today=C.today(),items=state.agenda||[],scheduled=A.sorted(items,today),upcoming=scheduled.filter(x=>x.at.slice(0,10)>=today),past=scheduled.filter(x=>x.at.slice(0,10)<today);
+ const permission=typeof Notification==='undefined'?'unsupported':Notification.permission;
+ const reminderButton=permission==='granted'?'<p class="small good">Notificações do navegador ativadas neste aparelho.</p>':permission==='denied'?'<p class="small muted">Notificações do navegador bloqueadas neste aparelho. O aviso dentro do Facilitador continua disponível.</p>':permission==='unsupported'?'':'<button type="button" class="btn subtle" data-action="agenda-permission">Ativar notificações neste aparelho</button>';
+ app.innerHTML=`<div class="eyebrow">Seu dia em ordem</div><div class="heading"><h1>Agenda e lembretes</h1>${btn('agenda-add','+ Novo compromisso','primary')}</div><p class="small muted">Anote compromissos, aniversários e reuniões. Os avisos aparecem com o Facilitador aberto; notificações do navegador podem ser ativadas neste aparelho.</p>${reminderButton}<div class="agenda-day"><h2>Próximos</h2>${upcoming.length?upcoming.map(x=>agendaCard(x.item,x.at)).join(''):'<div class="empty">Nada agendado por enquanto.<br>Toque em “Novo compromisso” para adicionar um compromisso ou lembrete.</div>'}</div>${past.length?`<details class="agenda-past"><summary>Datas passadas (${past.length})</summary>${past.map(x=>agendaCard(x.item,x.at)).join('')}</details>`:''}<p class="note">Sua agenda acompanha os outros dados da conta e sincroniza entre aparelhos quando a sincronização online estiver ativada.</p>`;
+}
+function agendaEditor(id=''){
+ const item=(state.agenda||[]).find(x=>x.id===id),value=item?.at||(()=>{const d=new Date(Date.now()+3600000);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;})();
+ openModal(item?'Editar compromisso':'Novo compromisso',`<form id="agenda-form" data-edit="${esc(item?.id||'')}"><label for="agenda-title">Compromisso</label><input id="agenda-title" maxlength="100" required placeholder="Ex.: reunião com Ana" value="${esc(item?.title||'')}"><label for="agenda-notes">Anotação</label><textarea id="agenda-notes" maxlength="500" placeholder="Local, assunto ou outros detalhes">${esc(item?.notes||'')}</textarea><label for="agenda-at">Data e horário</label><input id="agenda-at" type="datetime-local" required value="${esc(value)}"><label for="agenda-advance">Avisar</label><select id="agenda-advance">${A.ADVANCE.map(n=>`<option value="${n}" ${n===(item?.advance??15)?'selected':''}>${A.advanceLabel(n)}</option>`).join('')}</select><label for="agenda-repeat">Repetição</label><select id="agenda-repeat"><option value="once" ${item?.repeat!=='yearly'?'selected':''}>Uma vez</option><option value="yearly" ${item?.repeat==='yearly'?'selected':''}>Todo ano (ex.: aniversário)</option></select><div id="form-error" class="form-error" role="alert"></div><div class="form-footer"><button type="submit" class="btn primary full">${item?'Salvar alterações':'Adicionar à agenda'}</button></div></form>`);
+}
+function saveAgendaForm(form){
+ const next=JSON.parse(JSON.stringify(state)),id=form.dataset.edit||uid(),old=(next.agenda||[]).find(x=>x.id===id),title=$('agenda-title').value.trim();
+ const entry={id,title,notes:$('agenda-notes').value.trim(),at:$('agenda-at').value,advance:Number($('agenda-advance').value),repeat:$('agenda-repeat').value,completed:old?.completed||[]};
+ if(old)Object.assign(old,entry);else next.agenda=[...(next.agenda||[]),entry];
+ persist(next);closeModal();tab='agenda';render();toast(old?'Compromisso atualizado.':'Compromisso adicionado à agenda.');
+}
+function finishAgenda(id,date){const next=JSON.parse(JSON.stringify(state)),item=(next.agenda||[]).find(x=>x.id===id);if(!item||item.completed.includes(date))return;item.completed.push(date);persist(next);render();toast('Compromisso concluído.');}
+function checkAgendaReminders(){
+ if(document.hidden)return;
+ for(const {item,at} of A.due(state.agenda||[])){
+  const key=`${item.id}@${at}`;if(agendaNotified.has(key))continue;agendaNotified.add(key);
+  toast(`Lembrete: ${item.title} · ${at.slice(11,16)}`);
+  if(typeof Notification!=='undefined'&&Notification.permission==='granted')try{const alert=new Notification(`Lembrete · ${item.title}`,{body:`${at.slice(11,16)} · Facilitador de Vida`,tag:`agenda-${key}`});setTimeout(()=>alert.close(),15000);}catch{}
+ }
 }
 function renderQueue(){
  const pending=queue.filter(q=>!state.transactions.some(t=>t.sourceId===q.id&&!t.void));
@@ -181,6 +210,11 @@ document.addEventListener('click',e=>{
   else if(action==='goal-settings')goalSettings();
   else if(action==='show-goals'){tab='goals';render();window.scrollTo(0,0);}
   else if(action==='history')history();
+  else if(action==='agenda-add')agendaEditor();
+  else if(action==='agenda-edit')agendaEditor(el.dataset.id);
+  else if(action==='agenda-done')finishAgenda(el.dataset.id,el.dataset.date);
+  else if(action==='agenda-delete'){if(!confirm('Excluir este compromisso da agenda?'))return;mutate(s=>s.agenda=(s.agenda||[]).filter(item=>item.id!==el.dataset.id));toast('Compromisso excluído.');}
+  else if(action==='agenda-permission'){if(typeof Notification==='undefined'){toast('Este navegador não oferece notificações.');return;}Notification.requestPermission().then(permission=>{if(permission==='granted')toast('Notificações ativadas neste aparelho.');else toast('Avisos no Facilitador continuam disponíveis quando ele estiver aberto.');if(tab==='agenda')renderAgenda();});}
   else if(action==='pay-bill'){const b=state.bills.find(b=>b.id===el.dataset.id);entry('expense',{account:C.roleAccount(state,'bills').id,cents:Math.max(0,b.amount-C.paid(state,b.id,month)),bill:b.id,billMonth:month,note:b.name});}
   else if(action==='review'){const q=queue.find(q=>q.id===el.dataset.id);entry(q.kind==='review'?'expense':q.kind,{account:q.bank,cents:q.cents,draft:q,date:new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date(q.time))});}
   else if(action==='dismiss'){if(confirm('Ignorar este aviso? Nenhum saldo será alterado.'))dismiss(el.dataset.id);}
@@ -208,6 +242,8 @@ document.addEventListener('submit',e=>{e.preventDefault();try{
   saveGoals(e.target);autoSaveDone();closeModal();tab='goals';render();window.scrollTo(0,0);toast('Metas calculadas com o seu plano.');
  }else if(e.target.id==='settings-form'){
   saveSettings();autoSaveDone();render();toast('Ajustes salvos.');
+ }else if(e.target.id==='agenda-form'){
+  saveAgendaForm(e.target);
  }else if(e.target.id==='entry-form'){
   const t={id:uid(),kind:$('kind').value,cents:C.parseMoney($('value').value),account:$('account').value,date:$('entry-date').value,note:$('note').value};
   if(t.kind==='transfer')t.to=$('to').value;
@@ -229,8 +265,9 @@ $('backup-file').addEventListener('change',async e=>{const file=e.target.files[0
 window.addEventListener('storage',e=>{if(demo)return;if(e.key!==(cloudStore?.key||WebStore.KEY))return;if(autoSaveForm||modal.open||document.activeElement?.closest?.('form')){autoSaveMessage('Os dados mudaram em outra aba. Guarde os valores digitados antes de recarregar.');return;}try{const saved=webStore.load();if(modal.open)closeModal();state=saved||C.initial();render();toast('Dados atualizados por outra aba.');}catch(e){toast(e.message);}});
 let displayedDay=C.today();
 function refreshDate(){const day=C.today();if(day!==displayedDay&&!modal.open){displayedDay=day;month=day.slice(0,7);render();}}
-window.addEventListener('focus',()=>{window.refreshNative();refreshDate();if(cloudStore)void cloudStore.sync();});
+window.addEventListener('focus',()=>{window.refreshNative();refreshDate();checkAgendaReminders();if(cloudStore)void cloudStore.sync();});
 window.addEventListener('online',()=>{if(cloudStore)void cloudStore.sync();});
 setInterval(()=>{if(!document.hidden&&cloudStore)void cloudStore.sync();},10000);
 setInterval(()=>{if(!document.hidden&&!modal.open){window.refreshNative();refreshDate();}},5000);
+setInterval(checkAgendaReminders,20000);
 AuthUI.start(boot);

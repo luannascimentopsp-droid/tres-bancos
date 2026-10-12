@@ -23,6 +23,12 @@ test('first device uploads existing records; another device and a reload receive
  const updated=clone(state);updated.weekly.daily=18000;a.client.save(updated);await a.client.sync();await b.client.sync();
  assert.deepEqual(b.received.at(-1),updated);assert.deepEqual(await device(server,a.storage).client.open(null,Core.initial()),updated);
 });
+test('appointments sync to the signed-in devices and preserve annual recurrence and notes',async()=>{
+ const server=backend(),a=device(server),b=device(server),state=initial(),appointment={id:'birthday_1',title:'Aniversário da Ana',notes:'Levar o bolo',at:'2026-12-05T18:30',advance:60,repeat:'yearly',completed:[]};
+ state.agenda=[appointment];await a.client.open(state,Core.initial());await b.client.open(null,Core.initial());
+ assert.deepEqual(b.client.load().agenda,[appointment]);assert.deepEqual(server.row.state.agenda,[appointment]);
+ const changed=b.client.load();changed.agenda[0].completed=['2026-12-05'];b.client.save(changed);await b.client.sync();await a.client.sync();assert.deepEqual(a.client.load().agenda[0].completed,['2026-12-05']);
+});
 test('offline changes survive reload and upload on reconnect; lost acknowledgements are idempotent',async()=>{
  const server=backend(),a=device(server);await a.client.open(initial(),Core.initial());
  server.online=false;const updated=a.client.load();updated.weekly.daily=18000;a.client.save(updated);await a.client.sync();

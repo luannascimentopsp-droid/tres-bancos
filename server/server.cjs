@@ -2,10 +2,10 @@
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path');
 const {Pluggy}=require('./pluggy.cjs'),{Auth}=require('./auth.cjs');
 const ROOT=path.resolve(__dirname,'..');
-const ASSETS=new Set(['index.html','style.css','favicon.svg','app.js','core.js','planner.js','goals-ui.js','web-store.js','cloud-store.js','bank-config.js','bank-sync.js','bank-ui.js','auth-ui.js','login.html','login.js','login.css']);
+const ASSETS=new Set(['index.html','style.css','favicon.svg','app.js','core.js','planner.js','goals-ui.js','agenda.js','web-store.js','cloud-store.js','bank-config.js','bank-sync.js','bank-ui.js','auth-ui.js','login.html','login.js','login.css']);
 const PUBLIC=new Set(['favicon.svg','login.html','login.js','login.css']);
 // Only these static files are public in the demo. API routes keep their normal authentication.
-const DEMO=new Set(['demo.html','demo.js','demo.css','style.css','favicon.svg','core.js','planner.js','goals-ui.js','app.js']);
+const DEMO=new Set(['demo.html','demo.js','demo.css','style.css','favicon.svg','core.js','planner.js','goals-ui.js','agenda.js','app.js']);
 const MIME={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
 async function readJSON(req,limit=4096){
  if(!String(req.headers['content-type']||'').startsWith('application/json'))throw Object.assign(Error('Formato inválido.'),{status:415});
